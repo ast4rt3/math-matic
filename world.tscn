@@ -4,6 +4,7 @@
 [ext_resource type="Texture2D" uid="uid://8vnxxsb5pl4v" path="res://blacktile.png" id="1_fj7yv"]
 [ext_resource type="Script" uid="uid://jjloyt6iw7pi" path="res://world.gd" id="1_tlwt5"]
 [ext_resource type="PackedScene" uid="uid://cq2gau2gq8csi" path="res://buildings/Core.tscn" id="3_tlwt5"]
+[ext_resource type="PackedScene" uid="uid://c83lab7m8x4a1" path="res://UI.tscn" id="4_uitscn"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_tlwt5"]
 texture = ExtResource("1_fj7yv")
@@ -61,12 +62,4 @@ position = Vector2(3, 2)
 
 [node name="Core" parent="." unique_id=1575085873 instance=ExtResource("3_tlwt5")]
 
-[node name="UI" type="CanvasLayer" parent="." unique_id=193707997]
-
-[node name="MineButton" type="Button" parent="UI" unique_id=586447805]
-offset_left = 27.0
-offset_top = 574.0
-offset_right = 157.0
-offset_bottom = 637.0
-action_mode = 0
-text = "Place Mine"
+[node name="UI" parent="." unique_id=432077267 instance=ExtResource("4_uitscn")]

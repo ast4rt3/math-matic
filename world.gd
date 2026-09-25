@@ -21,6 +21,8 @@ var astar = AStarGrid2D.new()
 var links: Array = []
 
 func _ready():
+	if has_node("UI"):
+		$UI.offset = Vector2.ZERO
 	if has_node("UI/MineButton"):
 		$UI/MineButton.pressed.connect(start_placing_mine)
 	

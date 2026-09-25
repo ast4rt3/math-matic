@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://c83lab7m8x4a1"]
+
+[node name="UI" type="CanvasLayer" unique_id=1840107334]
+
+[node name="MineButton" type="Button" parent="." unique_id=672936677]
+offset_left = 997.0
+offset_top = 16.0
+offset_right = 1127.0
+offset_bottom = 79.0
+text = "Place Mine"
