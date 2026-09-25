@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://cq2gau2gq8csi"]
+
+[ext_resource type="Script" uid="uid://qo38rkjv23iq" path="res://buildings/core.gd" id="1_ve4ch"]
+[ext_resource type="Texture2D" uid="uid://ud410wemip7d" path="res://core.png" id="2_nwu43"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_6hf0w"]
+size = Vector2(64, 64)
+
+[node name="Core" type="Node2D" unique_id=1575085873]
+script = ExtResource("1_ve4ch")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=739122542]
+texture = ExtResource("2_nwu43")
+
+[node name="ClickArea" type="Area2D" parent="." unique_id=878288835]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ClickArea" unique_id=373435992]
+shape = SubResource("RectangleShape2D_6hf0w")
+
+[node name="InputPort" type="Node2D" parent="." unique_id=2073438868]
+position = Vector2(0, 30)
+
+[node name="CounterLabel" type="Label" parent="." unique_id=1079859296]
+offset_left = -19.0
+offset_top = -32.0
+offset_right = 21.0
+offset_bottom = -9.0
