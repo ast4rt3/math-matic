@@ -67,7 +67,7 @@ func _cell_to_pos(cell: Vector2i) -> Vector2:
 	return Vector2(cell.x * 16.0 + 8.0, cell.y * 16.0 + 8.0)
 
 func _snap_to_grid(pos: Vector2) -> Vector2:
-	var tile_size = 64
+	var tile_size = 16
 	return Vector2(
 		floor(pos.x / tile_size) * tile_size + tile_size / 2,
 		floor(pos.y / tile_size) * tile_size + tile_size / 2
@@ -75,7 +75,12 @@ func _snap_to_grid(pos: Vector2) -> Vector2:
 
 func _process(delta: float):
 	if placing_mine and mine_preview != null:
-		mine_preview.global_position = _snap_to_grid(get_global_mouse_position())
+		var snapped = _snap_to_grid(get_global_mouse_position())
+		mine_preview.global_position = snapped
+		if _can_place_building(snapped):
+			mine_preview.modulate = Color(1, 1, 1, 0.5)
+		else:
+			mine_preview.modulate = Color(1, 0, 0, 0.5)
 	
 	if linking and preview_line != null:
 		_update_astar()
@@ -138,11 +143,13 @@ func _input(event: InputEvent):
 
 			# If placing a mine, place it
 			if placing_mine:
-				_place_mine(_snap_to_grid(world_pos))
-				placing_mine = false
-				if mine_preview:
-					mine_preview.queue_free()
-					mine_preview = null
+				var snapped_pos = _snap_to_grid(world_pos)
+				if _can_place_building(snapped_pos):
+					_place_mine(snapped_pos)
+					placing_mine = false
+					if mine_preview:
+						mine_preview.queue_free()
+						mine_preview = null
 				return
 
 			# If we are currently linking, check if we clicked the Core to finalize
@@ -178,6 +185,48 @@ func _place_mine(world_pos: Vector2):
 	mine.position = world_pos
 	mine.linked_to = null
 	add_child(mine)
+
+func _can_place_building(pos: Vector2) -> bool:
+	var buildings = []
+	for child in get_children():
+		if child.name == "Core" or child.has_node("OutputPort"):
+			# Block if completely overlapping (same exact position)
+			if child.global_position.distance_to(pos) < 1.0:
+				return false
+			buildings.append(child.global_position)
+	
+	buildings.append(pos)
+	
+	# Prevent placing if it causes any building to be 100% covered by buildings ON TOP of it
+	for i in range(buildings.size()):
+		var b_pos = buildings[i]
+		var top_left = b_pos - Vector2(32, 32)
+		var completely_covered = true
+		
+		# A building has 16 cells of 16x16
+		for x in range(4):
+			for y in range(4):
+				var cell_center = top_left + Vector2(x * 16.0 + 8.0, y * 16.0 + 8.0)
+				var cell_covered = false
+				
+				# Only buildings placed AFTER this one (higher index) can cover it
+				for j in range(i + 1, buildings.size()):
+					var other_pos = buildings[j]
+					var other_rect = Rect2(other_pos - Vector2(32, 32), Vector2(64, 64))
+					if other_rect.has_point(cell_center):
+						cell_covered = true
+						break
+				
+				if not cell_covered:
+					completely_covered = false
+					break
+			if not completely_covered:
+				break
+				
+		if completely_covered:
+			return false
+			
+	return true
 
 func _clicked_node(node: Node2D, world_pos: Vector2) -> bool:
 	# Simple distance check — within 40px of the node center

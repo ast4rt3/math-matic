@@ -71,9 +71,9 @@ offset_bottom = 648.0
 border_width = 4.7
 
 [node name="MineButton" type="Button" parent="UI" unique_id=586447805]
-offset_left = 514.0
-offset_top = 298.0
-offset_right = 644.0
-offset_bottom = 361.0
+offset_left = 18.0
+offset_top = 568.0
+offset_right = 148.0
+offset_bottom = 631.0
 action_mode = 0
 text = "Place Mine"
