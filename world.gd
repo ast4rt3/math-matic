@@ -13,7 +13,6 @@ var mine_preview: Sprite2D = null
 var linking: bool = false
 var link_source: Node = null  # the Mine we started linking from
 var preview_line: Line2D = null
-var deleting_wires: bool = false
 
 # Auto-routing
 var astar = AStarGrid2D.new()
@@ -31,23 +30,32 @@ func _ready():
 	astar.cell_size = Vector2(4, 4)
 	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
 	astar.update()
+	_update_astar()
 
-func _set_building_solid(pos: Vector2, is_solid: bool):
+var _solid_cells = []
+
+func _mark_building_solid(pos: Vector2, is_solid: bool, track: bool = false):
 	var top_left = pos - Vector2(32, 32)
 	var start_cell = _pos_to_cell(top_left)
 	# A 64x64 building takes up 16x16 cells on a 4x4 grid
 	for x in range(16):
 		for y in range(16):
-			var cell = start_cell + Vector2i(x, y)
-			if astar.is_in_bounds(cell.x, cell.y):
-				astar.set_point_solid(cell, is_solid)
+			var c = start_cell + Vector2i(x, y)
+			if astar.is_in_boundsv(c):
+				astar.set_point_solid(c, is_solid)
+				if track and is_solid:
+					_solid_cells.append(c)
 
 func _update_astar():
-	astar.fill_solid_region(astar.region, false)
-	_set_building_solid(core.global_position, true)
+	for cell in _solid_cells:
+		if astar.is_in_boundsv(cell):
+			astar.set_point_solid(cell, false)
+	_solid_cells.clear()
+	
+	_mark_building_solid(core.global_position, true, true)
 	for child in get_children():
 		if child.has_node("OutputPort") and child.name != "Core":
-			_set_building_solid(child.global_position, true)
+			_mark_building_solid(child.global_position, true, true)
 			
 	# Make existing wires solid so we path around them
 	var valid_links = []
@@ -55,19 +63,21 @@ func _update_astar():
 		if is_instance_valid(line):
 			valid_links.append(line)
 			var pts = line.points
-			for i in range(pts.size() - 1):
-				var c1 = _pos_to_cell(pts[i])
-				var c2 = _pos_to_cell(pts[i+1])
+			for j in range(pts.size() - 1):
+				var c1 = _pos_to_cell(pts[j])
+				var c2 = _pos_to_cell(pts[j+1])
 				var dist = max(abs(c2.x - c1.x), abs(c2.y - c1.y))
 				if dist > 0:
 					for t in range(dist + 1):
 						var step = Vector2(c1).lerp(Vector2(c2), float(t)/dist)
-						var cell = Vector2i(round(step.x), round(step.y))
-						if astar.is_in_bounds(cell.x, cell.y):
-							astar.set_point_solid(cell, true)
+						var c = Vector2i(round(step.x), round(step.y))
+						if astar.is_in_boundsv(c):
+							astar.set_point_solid(c, true)
+							_solid_cells.append(c)
 				else:
-					if astar.is_in_bounds(c1.x, c1.y):
+					if astar.is_in_boundsv(c1):
 						astar.set_point_solid(c1, true)
+						_solid_cells.append(c1)
 	links = valid_links
 
 func _pos_to_cell(pos: Vector2) -> Vector2i:
@@ -88,14 +98,29 @@ func _get_closest_port(building: Node2D, target: Vector2) -> Vector2:
 	var dx = target.x - center.x
 	var dy = target.y - center.y
 	
+	var is_core = building.name == "Core"
+	var num_ports = 9 if is_core else 7
+	
+	var offsets = []
+	for i in range(num_ports):
+		offsets.append(-32.0 + (64.0 / (num_ports - 1)) * i)
+	
 	if abs(dx) > abs(dy):
 		var edge_x = center.x + 32 if dx > 0 else center.x - 32
-		var clamped_y = clamp(target.y, center.y - 32, center.y + 32)
-		return Vector2(edge_x, clamped_y)
+		var target_offset = target.y - center.y
+		var closest = offsets[0]
+		for offset in offsets:
+			if abs(target_offset - offset) < abs(target_offset - closest):
+				closest = offset
+		return Vector2(edge_x, center.y + closest)
 	else:
 		var edge_y = center.y + 32 if dy > 0 else center.y - 32
-		var clamped_x = clamp(target.x, center.x - 32, center.x + 32)
-		return Vector2(clamped_x, edge_y)
+		var target_offset = target.x - center.x
+		var closest = offsets[0]
+		for offset in offsets:
+			if abs(target_offset - offset) < abs(target_offset - closest):
+				closest = offset
+		return Vector2(center.x + closest, edge_y)
 
 func _is_cell_in_building(cell: Vector2i, building: Node2D) -> bool:
 	var top_left = building.global_position - Vector2(32, 32)
@@ -103,28 +128,6 @@ func _is_cell_in_building(cell: Vector2i, building: Node2D) -> bool:
 	return cell.x >= start_cell.x and cell.x < start_cell.x + 16 and cell.y >= start_cell.y and cell.y < start_cell.y + 16
 
 func _process(delta: float):
-	if deleting_wires:
-		var mouse_pos = get_global_mouse_position()
-		var to_remove = []
-		for line in links:
-			var pts = line.points
-			var hit = false
-			for i in range(pts.size() - 1):
-				var closest = Geometry2D.get_closest_point_to_segment(mouse_pos, pts[i], pts[i+1])
-				if closest.distance_to(mouse_pos) < 15.0:
-					hit = true
-					break
-			if hit:
-				to_remove.append(line)
-				
-		for line in to_remove:
-			links.erase(line)
-			for child in get_children():
-				if child.has_node("OutputPort") and child.name != "Core":
-					if child.global_position.distance_to(line.points[0]) < 40.0:
-						child.linked_to = null
-			line.queue_free()
-
 	if placing_mine and mine_preview != null:
 		mine_preview.global_position = _snap_to_grid(get_global_mouse_position())
 		if _can_place_building(mine_preview.global_position):
@@ -133,27 +136,51 @@ func _process(delta: float):
 			mine_preview.modulate = Color(1, 0, 0, 0.5)
 	
 	if linking and preview_line != null:
-		_update_astar()
 		var start_cell = _pos_to_cell(link_source.global_position)
 		var end_cell = _pos_to_cell(get_global_mouse_position())
 		
-		_set_building_solid(link_source.global_position, false)
-		_set_building_solid(core.global_position, false)
+		# Clamp to valid grid bounds to completely prevent out of bounds crashes
+		start_cell.x = clamp(start_cell.x, astar.region.position.x, astar.region.end.x - 1)
+		start_cell.y = clamp(start_cell.y, astar.region.position.y, astar.region.end.y - 1)
+		end_cell.x = clamp(end_cell.x, astar.region.position.x, astar.region.end.x - 1)
+		end_cell.y = clamp(end_cell.y, astar.region.position.y, astar.region.end.y - 1)
 		
-		var end_was_solid = false
-		if astar.is_in_bounds(end_cell.x, end_cell.y):
-			end_was_solid = astar.is_point_solid(end_cell)
-			if end_was_solid:
-				astar.set_point_solid(end_cell, false)
+		_mark_building_solid(link_source.global_position, false, false)
+		_mark_building_solid(core.global_position, false, false)
+		
+		var end_was_solid = astar.is_point_solid(end_cell)
+		if end_was_solid:
+			astar.set_point_solid(end_cell, false)
 			
-		var id_path = []
-		if astar.is_in_bounds(start_cell.x, start_cell.y) and astar.is_in_bounds(end_cell.x, end_cell.y):
-			id_path = astar.get_id_path(start_cell, end_cell)
+		# Dynamic Search Fence: completely bounds A* to prevent 10M cell worst-case hangs
+		var min_x = max(astar.region.position.x, min(start_cell.x, end_cell.x) - 60)
+		var max_x = min(astar.region.end.x - 1, max(start_cell.x, end_cell.x) + 60)
+		var min_y = max(astar.region.position.y, min(start_cell.y, end_cell.y) - 60)
+		var max_y = min(astar.region.end.y - 1, max(start_cell.y, end_cell.y) + 60)
 		
-		if end_was_solid and astar.is_in_bounds(end_cell.x, end_cell.y):
+		var fence_cells = []
+		for x in range(min_x, max_x + 1):
+			for y in [min_y, max_y]:
+				var c = Vector2i(x, y)
+				if not astar.is_point_solid(c):
+					astar.set_point_solid(c, true)
+					fence_cells.append(c)
+		for y in range(min_y + 1, max_y):
+			for x in [min_x, max_x]:
+				var c = Vector2i(x, y)
+				if not astar.is_point_solid(c):
+					astar.set_point_solid(c, true)
+					fence_cells.append(c)
+			
+		var id_path = astar.get_id_path(start_cell, end_cell)
+		
+		for c in fence_cells:
+			astar.set_point_solid(c, false)
+		
+		if end_was_solid:
 			astar.set_point_solid(end_cell, true)
-		_set_building_solid(core.global_position, true)
-		_set_building_solid(link_source.global_position, true)
+		_mark_building_solid(core.global_position, true, false)
+		_mark_building_solid(link_source.global_position, true, false)
 			
 		preview_line.clear_points()
 		
@@ -199,25 +226,40 @@ func _input(event: InputEvent):
 	if event is InputEventMouseButton:
 		var world_pos = get_global_mouse_position()
 
-		# --- RIGHT CLICK ---
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			if event.pressed:
-				deleting_wires = true
-				# Cancel any ongoing actions
-				if placing_mine:
-					placing_mine = false
-					if mine_preview:
-						mine_preview.queue_free()
-						mine_preview = null
-				if linking:
-					linking = false
-					link_source = null
-					if preview_line:
-						preview_line.queue_free()
-						preview_line = null
-			else:
-				deleting_wires = false
-			return
+		# --- RIGHT CLICK = cancel or delete ---
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			if placing_mine:
+				placing_mine = false
+				if mine_preview:
+					mine_preview.queue_free()
+					mine_preview = null
+				return
+			if linking:
+				linking = false
+				link_source = null
+				if preview_line:
+					preview_line.queue_free()
+					preview_line = null
+				return
+				
+			# If we are not placing or linking, try to delete a wire
+			for i in range(links.size() - 1, -1, -1):
+				var line = links[i]
+				var pts = line.points
+				var clicked = false
+				for j in range(pts.size() - 1):
+					var closest = Geometry2D.get_closest_point_to_segment(world_pos, pts[j], pts[j+1])
+					if world_pos.distance_to(closest) < 8.0:
+						clicked = true
+						break
+				if clicked:
+					var source = line.get_meta("source")
+					if is_instance_valid(source):
+						source.linked_to = null
+					line.queue_free()
+					links.remove_at(i)
+					_update_astar()
+					return
 
 		# --- LEFT CLICK PRESSED ---
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
@@ -256,7 +298,9 @@ func _input(event: InputEvent):
 				else:
 					link_source.linked_to = null # Stays exactly where the user let go
 					
+				preview_line.set_meta("source", link_source)
 				links.append(preview_line)
+				_update_astar()
 				
 				linking = false
 				link_source = null
@@ -268,6 +312,7 @@ func _place_mine(world_pos: Vector2):
 	mine.position = world_pos
 	mine.linked_to = null
 	add_child(mine)
+	_update_astar()
 
 func _can_place_building(pos: Vector2) -> bool:
 	var buildings = []
