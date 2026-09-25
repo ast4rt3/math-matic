@@ -4,21 +4,30 @@ extends Node2D
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var core: Node2D = $Core
 
-# Building placement
+# --- NEW STATE MACHINE ---
+enum State { IDLE, PLACING_MINE, DRAWING_WIRE, DELETING }
+var current_state: State = State.IDLE
+
+# --- GRID ENTITY SYSTEM ---
+# Dictionary mapping Vector2i grid coordinates to Entity data
+# Entity format: { "type": "miner"|"core"|"wire", "ref": Node2D, "value": float, "next": Vector2i }
+var grid_data: Dictionary = {}
+
+# Placement / UI Previews
 var mine_scene = preload("res://Mine.tscn")
-var placing_mine: bool = false
 var mine_preview: Sprite2D = null
 
-# Linking state
-var linking: bool = false
-var link_source: Node = null  # the Mine we started linking from
+# Wire Drawing State
+var wire_start_cell: Vector2i
+var link_source: Node2D = null
 var preview_line: Line2D = null
+var current_drawn_wire_cells: Array[Vector2i] = []
+
+# All drawn links (Still using Line2D visually for now to maintain feel)
+var links: Array = []
 
 # Auto-routing
 var astar = AStarGrid2D.new()
-
-# All drawn links (Line2D nodes)
-var links: Array = []
 
 func _ready():
 	if has_node("UI"):
@@ -30,7 +39,23 @@ func _ready():
 	astar.cell_size = Vector2(4, 4)
 	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
 	astar.update()
+	
+	# Initialize Grid Data with buildings
+	grid_data.clear()
+	_add_building_to_grid(core, "core")
+	for child in get_children():
+		if child.has_node("OutputPort") and child.name != "Core":
+			_add_building_to_grid(child, "miner")
+			
 	_update_astar()
+
+func _add_building_to_grid(building: Node2D, b_type: String):
+	var top_left = building.global_position - Vector2(32, 32)
+	var start_cell = _pos_to_cell(top_left)
+	for x in range(16):
+		for y in range(16):
+			var c = start_cell + Vector2i(x, y)
+			grid_data[c] = { "type": b_type, "ref": building }
 
 var _solid_cells = []
 
@@ -52,33 +77,11 @@ func _update_astar():
 			astar.set_point_solid(cell, false)
 	_solid_cells.clear()
 	
-	_mark_building_solid(core.global_position, true, true)
-	for child in get_children():
-		if child.has_node("OutputPort") and child.name != "Core":
-			_mark_building_solid(child.global_position, true, true)
-			
-	# Make existing wires solid so we path around them
-	var valid_links = []
-	for line in links:
-		if is_instance_valid(line):
-			valid_links.append(line)
-			var pts = line.points
-			for j in range(pts.size() - 1):
-				var c1 = _pos_to_cell(pts[j])
-				var c2 = _pos_to_cell(pts[j+1])
-				var dist = max(abs(c2.x - c1.x), abs(c2.y - c1.y))
-				if dist > 0:
-					for t in range(dist + 1):
-						var step = Vector2(c1).lerp(Vector2(c2), float(t)/dist)
-						var c = Vector2i(round(step.x), round(step.y))
-						if astar.is_in_boundsv(c):
-							astar.set_point_solid(c, true)
-							_solid_cells.append(c)
-				else:
-					if astar.is_in_boundsv(c1):
-						astar.set_point_solid(c1, true)
-						_solid_cells.append(c1)
-	links = valid_links
+	# The grid_data is the single source of truth for collisions!
+	for cell in grid_data:
+		if astar.is_in_boundsv(cell):
+			astar.set_point_solid(cell, true)
+			_solid_cells.append(cell)
 
 func _pos_to_cell(pos: Vector2) -> Vector2i:
 	return Vector2i(floor(pos.x / 4.0), floor(pos.y / 4.0))
@@ -128,14 +131,14 @@ func _is_cell_in_building(cell: Vector2i, building: Node2D) -> bool:
 	return cell.x >= start_cell.x and cell.x < start_cell.x + 16 and cell.y >= start_cell.y and cell.y < start_cell.y + 16
 
 func _process(delta: float):
-	if placing_mine and mine_preview != null:
+	if current_state == State.PLACING_MINE and mine_preview != null:
 		mine_preview.global_position = _snap_to_grid(get_global_mouse_position())
 		if _can_place_building(mine_preview.global_position):
 			mine_preview.modulate = Color(1, 1, 1, 0.5)
 		else:
 			mine_preview.modulate = Color(1, 0, 0, 0.5)
 	
-	if linking and preview_line != null:
+	if current_state == State.DRAWING_WIRE and preview_line != null:
 		var start_cell = _pos_to_cell(link_source.global_position)
 		var end_cell = _pos_to_cell(get_global_mouse_position())
 		
@@ -228,14 +231,14 @@ func _input(event: InputEvent):
 
 		# --- RIGHT CLICK = cancel or delete ---
 		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-			if placing_mine:
-				placing_mine = false
+			if current_state == State.PLACING_MINE:
+				current_state = State.IDLE
 				if mine_preview:
 					mine_preview.queue_free()
 					mine_preview = null
 				return
-			if linking:
-				linking = false
+			if current_state == State.DRAWING_WIRE:
+				current_state = State.IDLE
 				link_source = null
 				if preview_line:
 					preview_line.queue_free()
@@ -264,34 +267,35 @@ func _input(event: InputEvent):
 		# --- LEFT CLICK PRESSED ---
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			# If placing a mine, place it
-			if placing_mine:
+			if current_state == State.PLACING_MINE:
 				var snapped_pos = _snap_to_grid(world_pos)
 				if _can_place_building(snapped_pos):
 					_place_mine(snapped_pos)
-					placing_mine = false
+					current_state = State.IDLE
 					if mine_preview:
 						mine_preview.queue_free()
 						mine_preview = null
 				return
 
 			# Check if we clicked a Mine to start a link
-			for child in get_children():
-				if child.has_node("OutputPort") and child.name != "Core":
-					if _clicked_node(child, world_pos):
-						linking = true
-						link_source = child
-						
-						preview_line = Line2D.new()
-						preview_line.width = 3.0
-						preview_line.default_color = Color(0.2, 0.9, 1.0)
-						preview_line.add_point(child.get_node("OutputPort").global_position)
-						preview_line.add_point(world_pos)
-						add_child(preview_line)
-						return
+			if current_state == State.IDLE:
+				for child in get_children():
+					if child.has_node("OutputPort") and child.name != "Core":
+						if _clicked_node(child, world_pos):
+							current_state = State.DRAWING_WIRE
+							link_source = child
+							
+							preview_line = Line2D.new()
+							preview_line.width = 3.0
+							preview_line.default_color = Color(0.2, 0.9, 1.0)
+							preview_line.add_point(child.get_node("OutputPort").global_position)
+							preview_line.add_point(world_pos)
+							add_child(preview_line)
+							return
 
 		# --- LEFT CLICK RELEASED ---
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-			if linking:
+			if current_state == State.DRAWING_WIRE:
 				# Finalize link
 				if _clicked_node(core, world_pos):
 					link_source.linked_to = core
@@ -300,9 +304,22 @@ func _input(event: InputEvent):
 					
 				preview_line.set_meta("source", link_source)
 				links.append(preview_line)
+				
+				# Commit wire to GridManager
+				var pts = preview_line.points
+				for j in range(pts.size() - 1):
+					var c1 = _pos_to_cell(pts[j])
+					var c2 = _pos_to_cell(pts[j+1])
+					var dist = max(abs(c2.x - c1.x), abs(c2.y - c1.y))
+					if dist > 0:
+						for t in range(dist + 1):
+							var step = Vector2(c1).lerp(Vector2(c2), float(t)/dist)
+							var c = Vector2i(round(step.x), round(step.y))
+							grid_data[c] = { "type": "wire", "ref": preview_line }
+				
 				_update_astar()
 				
-				linking = false
+				current_state = State.IDLE
 				link_source = null
 				preview_line = null
 				return
@@ -312,6 +329,7 @@ func _place_mine(world_pos: Vector2):
 	mine.position = world_pos
 	mine.linked_to = null
 	add_child(mine)
+	_add_building_to_grid(mine, "miner")
 	_update_astar()
 
 func _can_place_building(pos: Vector2) -> bool:
@@ -362,7 +380,7 @@ func _clicked_node(node: Node2D, world_pos: Vector2) -> bool:
 
 # Call this from your UI toolbar button
 func start_placing_mine():
-	placing_mine = true
+	current_state = State.PLACING_MINE
 	if mine_preview == null:
 		mine_preview = Sprite2D.new()
 		mine_preview.texture = preload("res://Miner.png")
