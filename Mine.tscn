@@ -1,0 +1,18 @@
+[gd_scene format=3 uid="uid://d8b66wd2dg5a"]
+
+[ext_resource type="Texture2D" uid="uid://cpam8tjehbed1" path="res://Miner.png" id="1_evfvf"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_6hf0w"]
+size = Vector2(64, 64)
+
+[node name="Mine" type="Node2D" unique_id=1321175042]
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=1746763480]
+texture = ExtResource("1_evfvf")
+
+[node name="Clickarea" type="Area2D" parent="." unique_id=457680025]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Clickarea" unique_id=260122344]
+shape = SubResource("RectangleShape2D_6hf0w")
+
+[node name="OutputPort" type="Node2D" parent="." unique_id=21906023]
