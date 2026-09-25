@@ -1,11 +1,13 @@
 [gd_scene format=3 uid="uid://d8b66wd2dg5a"]
 
 [ext_resource type="Texture2D" uid="uid://cpam8tjehbed1" path="res://Miner.png" id="1_evfvf"]
+[ext_resource type="Script" uid="uid://1_minegd" path="res://mine.gd" id="2_minegd"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_6hf0w"]
 size = Vector2(64, 64)
 
 [node name="Mine" type="Node2D" unique_id=1321175042]
+script = ExtResource("2_minegd")
 
 [node name="Sprite" type="Sprite2D" parent="." unique_id=1746763480]
 texture = ExtResource("1_evfvf")

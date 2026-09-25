@@ -5,18 +5,23 @@ extends Node2D
 @onready var core: Node2D = $Core
 
 # Building placement
-var mine_scene = preload("res://buildings/Mine.tscn")
+var mine_scene = preload("res://Mine.tscn")
 var placing_mine: bool = false
+var mine_preview: Sprite2D = null
 
 # Linking state
-var linking: bool = false
 var link_source: Node = null  # the Mine we started linking from
 
 # All drawn links (Line2D nodes)
 var links: Array = []
 
 func _ready():
-	pass
+	if has_node("UI/MineButton"):
+		$UI/MineButton.pressed.connect(start_placing_mine)
+
+func _process(delta: float):
+	if placing_mine and mine_preview != null:
+		mine_preview.global_position = get_global_mouse_position()
 
 func _input(event: InputEvent):
 	if event is InputEventMouseButton and event.pressed:
@@ -25,8 +30,10 @@ func _input(event: InputEvent):
 		# --- RIGHT CLICK = cancel ---
 		if event.button_index == MOUSE_BUTTON_RIGHT:
 			placing_mine = false
-			linking = false
 			link_source = null
+			if mine_preview:
+				mine_preview.queue_free()
+				mine_preview = null
 			return
 
 		# --- LEFT CLICK ---
@@ -36,27 +43,22 @@ func _input(event: InputEvent):
 			if placing_mine:
 				_place_mine(world_pos)
 				placing_mine = false
-				return
-
-			# If linking, check if we clicked the Core
-			if linking:
-				if _clicked_node(core, world_pos):
-					_create_link(link_source, core)
-					linking = false
-					link_source = null
+				if mine_preview:
+					mine_preview.queue_free()
+					mine_preview = null
 				return
 
 			# Otherwise, check if we clicked a Mine to start a link
 			for child in get_children():
-				if child.name != "Core" and child is Node2D:
+				# We identify a Mine by checking if it has an "OutputPort"
+				if child.has_node("OutputPort") and child.name != "Core":
 					if _clicked_node(child, world_pos):
-						linking = true
-						link_source = child
+						_create_link(child, core)
 						return
 
 func _place_mine(world_pos: Vector2):
 	var mine = mine_scene.instantiate()
-	mine.position = _snap_to_grid(world_pos)
+	mine.position = world_pos
 	mine.linked_to = null
 	add_child(mine)
 
@@ -77,14 +79,11 @@ func _clicked_node(node: Node2D, world_pos: Vector2) -> bool:
 	# Simple distance check — within 40px of the node center
 	return node.global_position.distance_to(world_pos) < 40.0
 
-func _snap_to_grid(pos: Vector2) -> Vector2:
-	var tile_size = 64
-	return Vector2(
-		floor(pos.x / tile_size) * tile_size + tile_size / 2,
-		floor(pos.y / tile_size) * tile_size + tile_size / 2
-	)
-
 # Call this from your UI toolbar button
 func start_placing_mine():
 	placing_mine = true
-	linking = false
+	if mine_preview == null:
+		mine_preview = Sprite2D.new()
+		mine_preview.texture = preload("res://Miner.png")
+		mine_preview.modulate.a = 0.5
+		add_child(mine_preview)
