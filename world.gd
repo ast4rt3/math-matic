@@ -10,7 +10,12 @@ var placing_mine: bool = false
 var mine_preview: Sprite2D = null
 
 # Linking state
+var linking: bool = false
 var link_source: Node = null  # the Mine we started linking from
+var preview_line: Line2D = null
+
+# Auto-routing
+var astar = AStarGrid2D.new()
 
 # All drawn links (Line2D nodes)
 var links: Array = []
@@ -18,10 +23,94 @@ var links: Array = []
 func _ready():
 	if has_node("UI/MineButton"):
 		$UI/MineButton.pressed.connect(start_placing_mine)
+	
+	astar.region = Rect2i(-400, -400, 800, 800) # Covers -6400 to +6400 pixels
+	astar.cell_size = Vector2(16, 16)
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
+	astar.update()
+
+func _set_building_solid(pos: Vector2, is_solid: bool):
+	var top_left = pos - Vector2(32, 32)
+	var start_cell = _pos_to_cell(top_left)
+	# A 64x64 building takes up 4x4 cells on a 16x16 grid
+	for x in range(4):
+		for y in range(4):
+			astar.set_point_solid(start_cell + Vector2i(x, y), is_solid)
+
+func _update_astar():
+	astar.fill_solid_region(astar.region, false)
+	_set_building_solid(core.global_position, true)
+	for child in get_children():
+		if child.has_node("OutputPort") and child.name != "Core":
+			_set_building_solid(child.global_position, true)
+			
+	# Make existing wires solid so we path around them
+	for line in links:
+		var pts = line.points
+		for i in range(pts.size() - 1):
+			var c1 = _pos_to_cell(pts[i])
+			var c2 = _pos_to_cell(pts[i+1])
+			var dist = max(abs(c2.x - c1.x), abs(c2.y - c1.y))
+			if dist > 0:
+				for t in range(dist + 1):
+					var step = Vector2(c1).lerp(Vector2(c2), float(t)/dist)
+					astar.set_point_solid(Vector2i(round(step.x), round(step.y)), true)
+			else:
+				astar.set_point_solid(c1, true)
+
+func _pos_to_cell(pos: Vector2) -> Vector2i:
+	return Vector2i(floor(pos.x / 16.0), floor(pos.y / 16.0))
+
+func _cell_to_pos(cell: Vector2i) -> Vector2:
+	return Vector2(cell.x * 16.0 + 8.0, cell.y * 16.0 + 8.0)
+
+func _snap_to_grid(pos: Vector2) -> Vector2:
+	var tile_size = 64
+	return Vector2(
+		floor(pos.x / tile_size) * tile_size + tile_size / 2,
+		floor(pos.y / tile_size) * tile_size + tile_size / 2
+	)
 
 func _process(delta: float):
 	if placing_mine and mine_preview != null:
-		mine_preview.global_position = get_global_mouse_position()
+		mine_preview.global_position = _snap_to_grid(get_global_mouse_position())
+	
+	if linking and preview_line != null:
+		_update_astar()
+		var start_cell = _pos_to_cell(link_source.global_position)
+		# We snap the mouse pos to grid to make end_cell align nicely
+		var end_cell = _pos_to_cell(get_global_mouse_position())
+		
+		# Ensure start and end cells are NOT solid so A* can find a path
+		_set_building_solid(link_source.global_position, false)
+		_set_building_solid(core.global_position, false)
+		
+		var end_was_solid = astar.is_point_solid(end_cell)
+		if end_was_solid:
+			astar.set_point_solid(end_cell, false)
+			
+		var id_path = astar.get_id_path(start_cell, end_cell)
+		
+		if end_was_solid:
+			astar.set_point_solid(end_cell, true)
+		_set_building_solid(core.global_position, true)
+		_set_building_solid(link_source.global_position, true)
+			
+		preview_line.clear_points()
+		preview_line.add_point(link_source.get_node("OutputPort").global_position)
+		
+		if id_path.size() > 0:
+			for i in range(1, id_path.size() - 1):
+				preview_line.add_point(_cell_to_pos(id_path[i]))
+			
+			if _clicked_node(core, get_global_mouse_position()):
+				preview_line.add_point(core.get_node("InputPort").global_position)
+			else:
+				# snap the wire end to the center of the grid tile when drawing
+				preview_line.add_point(_cell_to_pos(end_cell))
+		else:
+			# Fallback if totally trapped
+			preview_line.add_point(get_global_mouse_position())
 
 func _input(event: InputEvent):
 	if event is InputEventMouseButton and event.pressed:
@@ -29,11 +118,17 @@ func _input(event: InputEvent):
 
 		# --- RIGHT CLICK = cancel ---
 		if event.button_index == MOUSE_BUTTON_RIGHT:
-			placing_mine = false
-			link_source = null
-			if mine_preview:
-				mine_preview.queue_free()
-				mine_preview = null
+			if placing_mine:
+				placing_mine = false
+				if mine_preview:
+					mine_preview.queue_free()
+					mine_preview = null
+			if linking:
+				linking = false
+				link_source = null
+				if preview_line:
+					preview_line.queue_free()
+					preview_line = null
 			return
 
 		# --- LEFT CLICK ---
@@ -41,19 +136,39 @@ func _input(event: InputEvent):
 
 			# If placing a mine, place it
 			if placing_mine:
-				_place_mine(world_pos)
+				_place_mine(_snap_to_grid(world_pos))
 				placing_mine = false
 				if mine_preview:
 					mine_preview.queue_free()
 					mine_preview = null
 				return
 
+			# If we are currently linking, check if we clicked the Core to finalize
+			if linking:
+				if _clicked_node(core, world_pos):
+					# Finalize link
+					preview_line.set_point_position(preview_line.get_point_count() - 1, core.get_node("InputPort").global_position)
+					link_source.linked_to = core
+					links.append(preview_line)
+					
+					linking = false
+					link_source = null
+					preview_line = null
+				return
+
 			# Otherwise, check if we clicked a Mine to start a link
 			for child in get_children():
-				# We identify a Mine by checking if it has an "OutputPort"
 				if child.has_node("OutputPort") and child.name != "Core":
 					if _clicked_node(child, world_pos):
-						_create_link(child, core)
+						linking = true
+						link_source = child
+						
+						preview_line = Line2D.new()
+						preview_line.width = 3.0
+						preview_line.default_color = Color(0.2, 0.9, 1.0)
+						preview_line.add_point(child.get_node("OutputPort").global_position)
+						preview_line.add_point(world_pos)
+						add_child(preview_line)
 						return
 
 func _place_mine(world_pos: Vector2):
@@ -61,19 +176,6 @@ func _place_mine(world_pos: Vector2):
 	mine.position = world_pos
 	mine.linked_to = null
 	add_child(mine)
-
-func _create_link(mine: Node, target: Node):
-	# Tell the mine who to send to
-	mine.linked_to = target
-
-	# Draw a Line2D between the two ports
-	var line = Line2D.new()
-	line.width = 3.0
-	line.default_color = Color(0.2, 0.9, 1.0)  # cyan
-	line.add_point(mine.get_node("OutputPort").global_position)
-	line.add_point(target.get_node("InputPort").global_position)
-	add_child(line)
-	links.append(line)
 
 func _clicked_node(node: Node2D, world_pos: Vector2) -> bool:
 	# Simple distance check — within 40px of the node center
