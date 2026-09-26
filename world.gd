@@ -23,19 +23,26 @@ var wire_start_pos: Vector2
 var link_source: Node2D = null
 var preview_line: Line2D = null
 var current_drawn_wire_cells: Array[Vector2i] = []
+var wire_renderer: Node2D
 
 # Hover Highlight
 var cursor_highlight: ReferenceRect
 var building_highlight: ReferenceRect
-var hovered_wire: Line2D = null
+var hovered_wire_id: int = -1
 
-# All drawn links (Still using Line2D visually for now to maintain feel)
-var links: Array = []
+# All drawn links (Stored as data to be rendered in _draw)
+var wire_paths: Dictionary = {} # wire_id -> { "points": Array, "source": Node2D, "color": Color }
+var next_wire_id: int = 0
 
 # Auto-routing
 var astar = AStarGrid2D.new()
 
 func _ready():
+	wire_renderer = Node2D.new()
+	wire_renderer.z_index = 10
+	add_child(wire_renderer)
+	wire_renderer.draw.connect(_on_wire_renderer_draw)
+	
 	# Create the cursor highlight visually
 	cursor_highlight = ReferenceRect.new()
 	cursor_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
@@ -161,7 +168,7 @@ func _is_cell_in_building(cell: Vector2i, building: Node2D) -> bool:
 	var start_cell = _pos_to_cell(top_left)
 	return cell.x >= start_cell.x and cell.x < start_cell.x + 16 and cell.y >= start_cell.y and cell.y < start_cell.y + 16
 
-func _get_wire_in_tile(pos: Vector2) -> Line2D:
+func _get_wire_in_tile(pos: Vector2) -> int:
 	var snapped = _snap_to_grid(pos)
 	var top_left = snapped - Vector2(8, 8)
 	var start_cell = _pos_to_cell(top_left)
@@ -169,8 +176,8 @@ func _get_wire_in_tile(pos: Vector2) -> Line2D:
 		for y in range(4):
 			var c = start_cell + Vector2i(x, y)
 			if grid_data.has(c) and grid_data[c].type == "wire":
-				return grid_data[c].ref
-	return null
+				return grid_data[c].wire_id
+	return -1
 
 func _process(delta: float):
 	# Update visual hover feedback
@@ -178,9 +185,11 @@ func _process(delta: float):
 	var cell = _pos_to_cell(mouse_pos)
 	
 	# Reset previous wire highlight
-	if hovered_wire != null and is_instance_valid(hovered_wire):
-		hovered_wire.default_color = Color(0.2, 0.9, 1.0)
-	hovered_wire = null
+	var needs_redraw = false
+	if hovered_wire_id != -1 and wire_paths.has(hovered_wire_id):
+		wire_paths[hovered_wire_id].color = Color(0.2, 0.9, 1.0)
+		needs_redraw = true
+	hovered_wire_id = -1
 	
 	# Always update 16x16 cursor
 	var snapped = _snap_to_grid(mouse_pos)
@@ -199,14 +208,18 @@ func _process(delta: float):
 			building_highlight.visible = true
 			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 0.15) # Lower opacity on building
 	else:
-		var wire_ref = _get_wire_in_tile(mouse_pos)
-		if wire_ref != null and current_state == State.IDLE:
+		var wire_id = _get_wire_in_tile(mouse_pos)
+		if wire_id != -1 and current_state == State.IDLE:
 			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 0.3) # Lower opacity on wire
-			hovered_wire = wire_ref
-			if is_instance_valid(hovered_wire):
-				hovered_wire.default_color = Color(1.0, 1.0, 1.0) # Bright White
+			hovered_wire_id = wire_id
+			if wire_paths.has(hovered_wire_id):
+				wire_paths[hovered_wire_id].color = Color(1.0, 1.0, 1.0) # Bright White
+			needs_redraw = true
 		else:
 			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 1.0)
+			
+	if needs_redraw:
+		wire_renderer.queue_redraw()
 		
 	if current_state == State.PLACING_MINE and mine_preview != null:
 		mine_preview.global_position = _snap_to_grid(mouse_pos)
@@ -298,26 +311,27 @@ func _input(event: InputEvent):
 				return
 				
 			# If we are not placing or linking, try to delete a wire
-			var line = _get_wire_in_tile(world_pos)
-			if line != null:
+			var wire_id = _get_wire_in_tile(world_pos)
+			if wire_id != -1:
+				var line_data = wire_paths[wire_id]
 				# Break the logical connection
-				var source = line.get_meta("source")
+				var source = line_data.source
 				if is_instance_valid(source):
 					source.linked_to = null
 					
 				# Clean up GridManager data
 				var cells_to_erase = []
 				for c in grid_data:
-					if grid_data[c].type == "wire" and grid_data[c].ref == line:
+					if grid_data[c].type == "wire" and grid_data[c].wire_id == wire_id:
 						cells_to_erase.append(c)
 				for c in cells_to_erase:
 					grid_data.erase(c)
 					
-				# Clean up visual Line2D and links array
-				links.erase(line)
-				line.queue_free()
+				# Clean up dictionary
+				wire_paths.erase(wire_id)
 				
 				_update_astar()
+				wire_renderer.queue_redraw()
 				return
 
 		# --- LEFT CLICK PRESSED ---
@@ -361,8 +375,16 @@ func _input(event: InputEvent):
 				else:
 					link_source.linked_to = null # Stays exactly where the user let go
 					
-				preview_line.set_meta("source", link_source)
-				links.append(preview_line)
+				# Save wire to dictionary
+				var wire_id = next_wire_id
+				next_wire_id += 1
+				
+				var wire_data = {
+					"points": preview_line.points.duplicate(),
+					"source": link_source,
+					"color": Color(0.2, 0.9, 1.0)
+				}
+				wire_paths[wire_id] = wire_data
 				
 				# Commit wire to GridManager
 				var pts = preview_line.points
@@ -374,13 +396,16 @@ func _input(event: InputEvent):
 						for t in range(dist + 1):
 							var step = Vector2(c1).lerp(Vector2(c2), float(t)/dist)
 							var c = Vector2i(round(step.x), round(step.y))
-							grid_data[c] = { "type": "wire", "ref": preview_line }
+							grid_data[c] = { "type": "wire", "wire_id": wire_id }
+				
+				preview_line.queue_free()
+				preview_line = null
 				
 				_update_astar()
+				wire_renderer.queue_redraw()
 				
 				current_state = State.IDLE
 				link_source = null
-				preview_line = null
 				return
 
 func _place_mine(world_pos: Vector2):
@@ -445,3 +470,9 @@ func start_placing_mine():
 		mine_preview.texture = preload("res://asset/Miner.png")
 		mine_preview.modulate.a = 0.5
 		add_child(mine_preview)
+
+func _on_wire_renderer_draw():
+	for wire_id in wire_paths:
+		var w = wire_paths[wire_id]
+		if w.points.size() > 1:
+			wire_renderer.draw_polyline(w.points, w.color, 8.0, false)
