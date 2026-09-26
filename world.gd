@@ -360,33 +360,15 @@ func _input(event: InputEvent):
 					preview_line = null
 				return
 				
-			# If we are not placing or linking, try to delete a wire
+			# If we are not placing or linking, try to delete a building or wire
+			var clicked_cell = _pos_to_cell(world_pos)
+			if grid_data.has(clicked_cell) and grid_data[clicked_cell].type == "miner":
+				_delete_building(grid_data[clicked_cell].ref)
+				return
+				
 			var wire_id = _get_wire_in_tile(world_pos)
 			if wire_id != -1:
-				var line_data = wire_paths[wire_id]
-				# Break the logical connection
-				var source = line_data.source
-				if is_instance_valid(source):
-					source.linked_to = null
-					
-				# Clean up visual items on this wire
-				for item in line_data.items:
-					if is_instance_valid(item.visual):
-						item.visual.queue_free()
-					
-				# Clean up GridManager data
-				var cells_to_erase = []
-				for c in grid_data:
-					if grid_data[c].type == "wire" and grid_data[c].wire_id == wire_id:
-						cells_to_erase.append(c)
-				for c in cells_to_erase:
-					grid_data.erase(c)
-					
-				# Clean up dictionary
-				wire_paths.erase(wire_id)
-				
-				_update_astar()
-				wire_renderer.queue_redraw()
+				_delete_wire(wire_id)
 				return
 
 		# --- LEFT CLICK PRESSED ---
@@ -396,10 +378,7 @@ func _input(event: InputEvent):
 				var snapped_pos = _snap_to_grid(world_pos)
 				if _can_place_building(snapped_pos):
 					_place_mine(snapped_pos)
-					current_state = State.IDLE
-					if mine_preview:
-						mine_preview.queue_free()
-						mine_preview = null
+					# Intentionally DO NOT reset state to IDLE here, allowing for multiple placements!
 				return
 
 			# Check if we clicked a Mine to start a link
@@ -521,12 +500,66 @@ func _clicked_node(node: Node2D, world_pos: Vector2) -> bool:
 
 # Call this from your UI toolbar button
 func start_placing_mine():
+	if current_state == State.PLACING_MINE:
+		# Toggle OFF
+		current_state = State.IDLE
+		if mine_preview:
+			mine_preview.queue_free()
+			mine_preview = null
+		return
+		
+	# Toggle ON
 	current_state = State.PLACING_MINE
 	if mine_preview == null:
 		mine_preview = Sprite2D.new()
 		mine_preview.texture = preload("res://asset/Miner.png")
 		mine_preview.modulate.a = 0.5
 		add_child(mine_preview)
+
+func _delete_building(building: Node2D):
+	if building.name == "Core": return # Cannot delete core
+	
+	# Clean up any connected wires
+	var wires_to_remove = []
+	for wire_id in wire_paths:
+		var w = wire_paths[wire_id]
+		if w.source == building or w.destination == building:
+			wires_to_remove.append(wire_id)
+			
+	for w_id in wires_to_remove:
+		_delete_wire(w_id)
+		
+	# Clean up building from grid
+	var cells_to_erase = []
+	for c in grid_data:
+		if grid_data[c].type == "miner" and grid_data[c].ref == building:
+			cells_to_erase.append(c)
+	for c in cells_to_erase:
+		grid_data.erase(c)
+		
+	building.queue_free()
+	_update_astar()
+
+func _delete_wire(wire_id: int):
+	if not wire_paths.has(wire_id): return
+	var line_data = wire_paths[wire_id]
+	if is_instance_valid(line_data.source):
+		line_data.source.linked_to = null
+		
+	for item in line_data.items:
+		if is_instance_valid(item.visual):
+			item.visual.queue_free()
+			
+	var cells_to_erase = []
+	for c in grid_data:
+		if grid_data[c].type == "wire" and grid_data[c].wire_id == wire_id:
+			cells_to_erase.append(c)
+	for c in cells_to_erase:
+		grid_data.erase(c)
+		
+	wire_paths.erase(wire_id)
+	_update_astar()
+	wire_renderer.queue_redraw()
 
 func _on_wire_renderer_draw():
 	for wire_id in wire_paths:
