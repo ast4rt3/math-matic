@@ -19,6 +19,7 @@ var mine_preview: Sprite2D = null
 
 # Wire Drawing State
 var wire_start_cell: Vector2i
+var wire_start_pos: Vector2
 var link_source: Node2D = null
 var preview_line: Line2D = null
 var current_drawn_wire_cells: Array[Vector2i] = []
@@ -137,98 +138,6 @@ func _process(delta: float):
 			mine_preview.modulate = Color(1, 1, 1, 0.5)
 		else:
 			mine_preview.modulate = Color(1, 0, 0, 0.5)
-	
-	if current_state == State.DRAWING_WIRE and preview_line != null:
-		var start_cell = _pos_to_cell(link_source.global_position)
-		var end_cell = _pos_to_cell(get_global_mouse_position())
-		
-		# Safely limit the max drawing distance to prevent massive A* freezes
-		var diff = end_cell - start_cell
-		if abs(diff.x) > 150: end_cell.x = start_cell.x + sign(diff.x) * 150
-		if abs(diff.y) > 150: end_cell.y = start_cell.y + sign(diff.y) * 150
-		
-		# Clamp to valid grid bounds to completely prevent out of bounds crashes
-		start_cell.x = clamp(start_cell.x, astar.region.position.x, astar.region.end.x - 1)
-		start_cell.y = clamp(start_cell.y, astar.region.position.y, astar.region.end.y - 1)
-		end_cell.x = clamp(end_cell.x, astar.region.position.x, astar.region.end.x - 1)
-		end_cell.y = clamp(end_cell.y, astar.region.position.y, astar.region.end.y - 1)
-		
-		_mark_building_solid(link_source.global_position, false, false)
-		_mark_building_solid(core.global_position, false, false)
-		
-		var end_was_solid = astar.is_point_solid(end_cell)
-		if end_was_solid:
-			astar.set_point_solid(end_cell, false)
-			
-		# Dynamic Search Fence: completely bounds A* to prevent 10M cell worst-case hangs
-		var min_x = max(astar.region.position.x, min(start_cell.x, end_cell.x) - 60)
-		var max_x = min(astar.region.end.x - 1, max(start_cell.x, end_cell.x) + 60)
-		var min_y = max(astar.region.position.y, min(start_cell.y, end_cell.y) - 60)
-		var max_y = min(astar.region.end.y - 1, max(start_cell.y, end_cell.y) + 60)
-		
-		var fence_cells = []
-		for x in range(min_x, max_x + 1):
-			for y in [min_y, max_y]:
-				var c = Vector2i(x, y)
-				if not astar.is_point_solid(c):
-					astar.set_point_solid(c, true)
-					fence_cells.append(c)
-		for y in range(min_y + 1, max_y):
-			for x in [min_x, max_x]:
-				var c = Vector2i(x, y)
-				if not astar.is_point_solid(c):
-					astar.set_point_solid(c, true)
-					fence_cells.append(c)
-			
-		var id_path = astar.get_id_path(start_cell, end_cell)
-		
-		for c in fence_cells:
-			astar.set_point_solid(c, false)
-		
-		if end_was_solid:
-			astar.set_point_solid(end_cell, true)
-		_mark_building_solid(core.global_position, true, false)
-		_mark_building_solid(link_source.global_position, true, false)
-			
-		preview_line.clear_points()
-		
-		if id_path.size() > 0:
-			var first_outside_idx = 0
-			for i in range(id_path.size()):
-				if not _is_cell_in_building(id_path[i], link_source):
-					first_outside_idx = i
-					break
-			
-			if first_outside_idx < id_path.size() and first_outside_idx > 0:
-				var first_outside_pos = _cell_to_pos(id_path[first_outside_idx])
-				var start_port = _get_closest_port(link_source, first_outside_pos)
-				preview_line.add_point(start_port)
-				
-				var last_idx = id_path.size() - 1
-				var clicked_core = _clicked_node(core, get_global_mouse_position())
-				if clicked_core:
-					for i in range(id_path.size() - 1, -1, -1):
-						if not _is_cell_in_building(id_path[i], core):
-							last_idx = i
-							break
-							
-				for i in range(first_outside_idx, last_idx + 1):
-					preview_line.add_point(_cell_to_pos(id_path[i]))
-					
-				if clicked_core:
-					var end_target = preview_line.get_point_position(preview_line.get_point_count() - 1) if preview_line.get_point_count() > 0 else start_port
-					preview_line.add_point(_get_closest_port(core, end_target))
-				else:
-					# snap the wire end to the center of the grid tile when drawing
-					preview_line.add_point(_cell_to_pos(end_cell))
-			else:
-				# Mouse is still inside the start building or path is too short
-				preview_line.add_point(link_source.global_position)
-				preview_line.add_point(get_global_mouse_position())
-		else:
-			# Fallback if totally trapped
-			preview_line.add_point(link_source.global_position)
-			preview_line.add_point(get_global_mouse_position())
 
 func _notification(what):
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
@@ -245,6 +154,50 @@ func _notification(what):
 				mine_preview = null
 
 func _input(event: InputEvent):
+	if event is InputEventMouseMotion:
+		if current_state == State.DRAWING_WIRE and preview_line != null:
+			var last_point = preview_line.get_point_position(preview_line.get_point_count() - 1)
+			var target_pos = _snap_to_grid(get_global_mouse_position())
+			
+			if last_point != target_pos:
+				var dx = target_pos.x - last_point.x
+				var dy = target_pos.y - last_point.y
+				var angle = atan2(dy, dx)
+				
+				# Snap angle to nearest 45 degrees
+				var snapped_angle = round(angle / (PI / 4.0)) * (PI / 4.0)
+				
+				var step_x = round(cos(snapped_angle)) * 16.0
+				var step_y = round(sin(snapped_angle)) * 16.0
+				var step_vec = Vector2(step_x, step_y)
+				
+				var current = last_point
+				var steps = 0
+				
+				# Catch up to the mouse if dragged fast
+				while current.distance_to(target_pos) >= 16.0 and steps < 50:
+					steps += 1
+					var next = current + step_vec
+					
+					var cell = _pos_to_cell(next)
+					var hit_building = false
+					var hit_self = false
+					
+					if grid_data.has(cell):
+						if grid_data[cell].type == "core" or grid_data[cell].type == "miner":
+							hit_building = true
+					
+					for i in range(preview_line.get_point_count()):
+						if preview_line.get_point_position(i).distance_to(next) < 1.0:
+							hit_self = true
+							break
+							
+					if hit_building or hit_self:
+						break
+						
+					preview_line.add_point(next)
+					current = next
+
 	if event is InputEventMouseButton:
 		var world_pos = get_global_mouse_position()
 
@@ -305,10 +258,13 @@ func _input(event: InputEvent):
 							link_source = child
 							
 							preview_line = Line2D.new()
-							preview_line.width = 3.0
+							preview_line.width = 8.0
 							preview_line.default_color = Color(0.2, 0.9, 1.0)
-							preview_line.add_point(child.get_node("OutputPort").global_position)
-							preview_line.add_point(world_pos)
+							preview_line.texture_mode = Line2D.LINE_TEXTURE_TILE
+							
+							# Lock starting point to port
+							wire_start_pos = _get_closest_port(child, world_pos)
+							preview_line.add_point(wire_start_pos)
 							add_child(preview_line)
 							return
 
