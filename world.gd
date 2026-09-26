@@ -175,10 +175,14 @@ func _input(event: InputEvent):
 				var steps = 0
 				
 				# Catch up to the mouse if dragged fast
-				while current.distance_to(target_pos) >= 16.0 and steps < 50:
+				while steps < 50:
 					steps += 1
 					var next = current + step_vec
 					
+					# Prevent infinite oscillation if we overshoot the target axis
+					if next.distance_squared_to(target_pos) >= current.distance_squared_to(target_pos):
+						break
+						
 					var cell = _pos_to_cell(next)
 					var hit_building = false
 					var hit_self = false
@@ -358,6 +362,6 @@ func start_placing_mine():
 	current_state = State.PLACING_MINE
 	if mine_preview == null:
 		mine_preview = Sprite2D.new()
-		mine_preview.texture = preload("res://Miner.png")
+		mine_preview.texture = preload("res://asset/Miner.png")
 		mine_preview.modulate.a = 0.5
 		add_child(mine_preview)
