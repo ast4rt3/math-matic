@@ -43,6 +43,13 @@ func _ready():
 	add_child(wire_renderer)
 	wire_renderer.draw.connect(_on_wire_renderer_draw)
 	
+	if Engine.has_singleton("TickManager") or true:
+		# Connect to TickManager assuming it's loaded as autoload
+		# We'll use a dynamic call to be safe
+		var tm = get_node_or_null("/root/TickManager")
+		if tm:
+			tm.ticked.connect(_on_tick)
+	
 	# Create the cursor highlight visually
 	cursor_highlight = ReferenceRect.new()
 	cursor_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
@@ -221,6 +228,47 @@ func _process(delta: float):
 	if needs_redraw:
 		wire_renderer.queue_redraw()
 		
+	# Move items along the wire
+	var speed = 64.0 # pixels per second
+	for wire_id in wire_paths:
+		var w = wire_paths[wire_id]
+		var total_length = _get_wire_length(w.points)
+		
+		# Process from oldest (index 0) to newest (index size-1) to handle traffic
+		for i in range(w.items.size()):
+			var item = w.items[i]
+			var max_progress = total_length
+			
+			var can_enter = is_instance_valid(w.source) and w.source.linked_to != null
+			
+			if not can_enter:
+				# Stack up at the end if not connected
+				max_progress = total_length - (i * 16.0)
+				
+			# Don't overlap with the item ahead of us
+			if i > 0:
+				var item_ahead = w.items[i-1]
+				max_progress = min(max_progress, item_ahead.progress - 16.0)
+				
+			if item.progress < max_progress:
+				item.progress = min(item.progress + speed * delta, max_progress)
+			
+			if item.progress >= total_length and can_enter:
+				# Item reached the end and can enter the building!
+				w.source.linked_to.receive(item.value)
+				if is_instance_valid(item.visual):
+					item.visual.queue_free()
+				item.queued_for_deletion = true
+			else:
+				# Update visual position
+				if is_instance_valid(item.visual):
+					item.visual.global_position = _get_pos_along_wire(w.points, item.progress) - Vector2(8, 12)
+					
+		# Remove deleted items
+		for i in range(w.items.size() - 1, -1, -1):
+			if w.items[i].has("queued_for_deletion") and w.items[i].queued_for_deletion:
+				w.items.remove_at(i)
+		
 	if current_state == State.PLACING_MINE and mine_preview != null:
 		mine_preview.global_position = _snap_to_grid(mouse_pos)
 		if _can_place_building(mine_preview.global_position):
@@ -319,6 +367,11 @@ func _input(event: InputEvent):
 				if is_instance_valid(source):
 					source.linked_to = null
 					
+				# Clean up visual items on this wire
+				for item in line_data.items:
+					if is_instance_valid(item.visual):
+						item.visual.queue_free()
+					
 				# Clean up GridManager data
 				var cells_to_erase = []
 				for c in grid_data:
@@ -369,9 +422,10 @@ func _input(event: InputEvent):
 		# --- LEFT CLICK RELEASED ---
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			if current_state == State.DRAWING_WIRE:
-				# Finalize link
-				if _clicked_node(core, world_pos):
-					link_source.linked_to = core
+				# Finalize link by checking what building is at the end cell
+				var end_cell = _pos_to_cell(world_pos)
+				if grid_data.has(end_cell) and (grid_data[end_cell].type == "core" or grid_data[end_cell].type == "miner"):
+					link_source.linked_to = grid_data[end_cell].ref
 				else:
 					link_source.linked_to = null # Stays exactly where the user let go
 					
@@ -382,7 +436,8 @@ func _input(event: InputEvent):
 				var wire_data = {
 					"points": preview_line.points.duplicate(),
 					"source": link_source,
-					"color": Color(0.2, 0.9, 1.0)
+					"color": Color(0.2, 0.9, 1.0),
+					"items": []
 				}
 				wire_paths[wire_id] = wire_data
 				
@@ -476,3 +531,52 @@ func _on_wire_renderer_draw():
 		var w = wire_paths[wire_id]
 		if w.points.size() > 1:
 			wire_renderer.draw_polyline(w.points, w.color, 8.0, false)
+
+func _on_tick():
+	# Every tick, miners generate an item onto their output wire
+	for wire_id in wire_paths:
+		var w = wire_paths[wire_id]
+		if w.source != null and is_instance_valid(w.source):
+			if w.source.name.begins_with("Mine"):
+				var val = 1.0
+				if "output_value" in w.source:
+					val = w.source.output_value
+					
+				var val_str = str(val)
+				if val == round(val):
+					val_str = str(int(val))
+				
+				var lbl = Label.new()
+				lbl.text = val_str
+				lbl.add_theme_font_size_override("font_size", 12)
+				lbl.add_theme_color_override("font_color", Color(1, 1, 1))
+				lbl.z_index = 20
+				add_child(lbl)
+				
+				var new_item = {
+					"value": val,
+					"progress": 0.0,
+					"visual": lbl
+				}
+				w.items.append(new_item)
+
+func _get_wire_length(pts: PackedVector2Array) -> float:
+	var total = 0.0
+	for i in range(pts.size() - 1):
+		total += pts[i].distance_to(pts[i+1])
+	return total
+
+func _get_pos_along_wire(pts: PackedVector2Array, distance: float) -> Vector2:
+	if pts.size() == 0: return Vector2.ZERO
+	if pts.size() == 1: return pts[0]
+	
+	var current_dist = 0.0
+	for i in range(pts.size() - 1):
+		var p1 = pts[i]
+		var p2 = pts[i+1]
+		var seg_len = p1.distance_to(p2)
+		if current_dist + seg_len >= distance:
+			var t = (distance - current_dist) / seg_len
+			return p1.lerp(p2, t)
+		current_dist += seg_len
+	return pts[pts.size() - 1]

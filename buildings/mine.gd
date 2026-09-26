@@ -10,5 +10,4 @@ func _ready():
 	TickManager.ticked.connect(_on_tick)
 
 func _on_tick():
-	if linked_to != null:
-		linked_to.receive(output_value)
+	pass # Flow logic is now handled visually by the wire system in world.gd
