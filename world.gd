@@ -14,7 +14,7 @@ var current_state: State = State.IDLE
 var grid_data: Dictionary = {}
 
 # Placement / UI Previews
-var mine_scene = preload("res://Mine.tscn")
+var mine_scene = preload("res://buildings/Mine.tscn")
 var mine_preview: Sprite2D = null
 
 # Wire Drawing State
