@@ -26,6 +26,7 @@ var current_drawn_wire_cells: Array[Vector2i] = []
 
 # Hover Highlight
 var cursor_highlight: ReferenceRect
+var building_highlight: ReferenceRect
 var hovered_wire: Line2D = null
 
 # All drawn links (Still using Line2D visually for now to maintain feel)
@@ -47,6 +48,18 @@ func _ready():
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	cursor_highlight.add_child(bg)
 	add_child(cursor_highlight)
+	
+	building_highlight = ReferenceRect.new()
+	building_highlight.border_color = Color(1.0, 1.0, 1.0, 0.5)
+	building_highlight.border_width = 2.0
+	building_highlight.editor_only = false
+	building_highlight.z_index = 99
+	
+	var b_bg = ColorRect.new()
+	b_bg.color = Color(1.0, 1.0, 1.0, 0.1)
+	b_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	building_highlight.add_child(b_bg)
+	add_child(building_highlight)
 
 	if has_node("UI"):
 		$UI.offset = Vector2.ZERO
@@ -169,25 +182,31 @@ func _process(delta: float):
 		hovered_wire.default_color = Color(0.2, 0.9, 1.0)
 	hovered_wire = null
 	
+	# Always update 16x16 cursor
+	var snapped = _snap_to_grid(mouse_pos)
+	cursor_highlight.global_position = snapped - Vector2(8, 8)
+	cursor_highlight.size = Vector2(16, 16)
+	cursor_highlight.visible = true
+	
+	# Reset building highlight
+	building_highlight.visible = false
+	
 	if grid_data.has(cell) and (grid_data[cell].type == "miner" or grid_data[cell].type == "core"):
 		var building = grid_data[cell].ref
 		if is_instance_valid(building):
-			cursor_highlight.global_position = building.global_position - Vector2(32, 32)
-			cursor_highlight.size = Vector2(64, 64)
-			cursor_highlight.visible = true
+			building_highlight.global_position = building.global_position - Vector2(32, 32)
+			building_highlight.size = Vector2(64, 64)
+			building_highlight.visible = true
+			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 0.15) # Lower opacity on building
 	else:
 		var wire_ref = _get_wire_in_tile(mouse_pos)
 		if wire_ref != null and current_state == State.IDLE:
-			# Hide the box, just highlight the wire itself
-			cursor_highlight.visible = false
+			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 0.3) # Lower opacity on wire
 			hovered_wire = wire_ref
 			if is_instance_valid(hovered_wire):
 				hovered_wire.default_color = Color(1.0, 1.0, 1.0) # Bright White
 		else:
-			var snapped = _snap_to_grid(mouse_pos)
-			cursor_highlight.global_position = snapped - Vector2(8, 8)
-			cursor_highlight.size = Vector2(16, 16)
-			cursor_highlight.visible = true
+			cursor_highlight.modulate = Color(1.0, 1.0, 1.0, 1.0)
 		
 	if current_state == State.PLACING_MINE and mine_preview != null:
 		mine_preview.global_position = _snap_to_grid(mouse_pos)
