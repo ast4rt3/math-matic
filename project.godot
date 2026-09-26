@@ -17,8 +17,6 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-TickManager="*uid://bv14miegk1btp"
-
 [display]
 
 window/stretch/mode="canvas_items"

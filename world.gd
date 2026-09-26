@@ -7,6 +7,8 @@ extends Node2D
 # --- NEW STATE MACHINE ---
 enum State { IDLE, PLACING_MINE, DRAWING_WIRE, DELETING }
 var current_state: State = State.IDLE
+var tick_accumulator: float = 0.0
+var tick_rate: float = 0.4 # seconds per tick
 
 # --- GRID ENTITY SYSTEM ---
 # Dictionary mapping Vector2i grid coordinates to Entity data
@@ -33,6 +35,7 @@ var hovered_wire_id: int = -1
 # All drawn links (Stored as data to be rendered in _draw)
 var wire_paths: Dictionary = {} # wire_id -> { "points": Array, "source": Node2D, "color": Color }
 var next_wire_id: int = 0
+var miner_round_robin: Dictionary = {} # source_node -> current_wire_index
 
 # Auto-routing
 var astar = AStarGrid2D.new()
@@ -42,13 +45,6 @@ func _ready():
 	wire_renderer.z_index = 10
 	add_child(wire_renderer)
 	wire_renderer.draw.connect(_on_wire_renderer_draw)
-	
-	if Engine.has_singleton("TickManager") or true:
-		# Connect to TickManager assuming it's loaded as autoload
-		# We'll use a dynamic call to be safe
-		var tm = get_node_or_null("/root/TickManager")
-		if tm:
-			tm.ticked.connect(_on_tick)
 	
 	# Create the cursor highlight visually
 	cursor_highlight = ReferenceRect.new()
@@ -187,6 +183,12 @@ func _get_wire_in_tile(pos: Vector2) -> int:
 	return -1
 
 func _process(delta: float):
+	# Handle deterministic factory ticks
+	tick_accumulator += delta
+	while tick_accumulator >= tick_rate:
+		tick_accumulator -= tick_rate
+		_on_tick()
+		
 	# Update visual hover feedback
 	var mouse_pos = get_global_mouse_position()
 	var cell = _pos_to_cell(mouse_pos)
@@ -229,7 +231,7 @@ func _process(delta: float):
 		wire_renderer.queue_redraw()
 		
 	# Move items along the wire
-	var speed = 64.0 # pixels per second
+	var speed = 300.0 # pixels per second
 	for wire_id in wire_paths:
 		var w = wire_paths[wire_id]
 		var total_length = _get_wire_length(w.points)
@@ -239,7 +241,7 @@ func _process(delta: float):
 			var item = w.items[i]
 			var max_progress = total_length
 			
-			var can_enter = is_instance_valid(w.source) and w.source.linked_to != null
+			var can_enter = is_instance_valid(w.destination)
 			
 			if not can_enter:
 				# Stack up at the end if not connected
@@ -255,7 +257,7 @@ func _process(delta: float):
 			
 			if item.progress >= total_length and can_enter:
 				# Item reached the end and can enter the building!
-				w.source.linked_to.receive(item.value)
+				w.destination.receive(item.value)
 				if is_instance_valid(item.visual):
 					item.visual.queue_free()
 				item.queued_for_deletion = true
@@ -424,10 +426,9 @@ func _input(event: InputEvent):
 			if current_state == State.DRAWING_WIRE:
 				# Finalize link by checking what building is at the end cell
 				var end_cell = _pos_to_cell(world_pos)
+				var destination = null
 				if grid_data.has(end_cell) and (grid_data[end_cell].type == "core" or grid_data[end_cell].type == "miner"):
-					link_source.linked_to = grid_data[end_cell].ref
-				else:
-					link_source.linked_to = null # Stays exactly where the user let go
+					destination = grid_data[end_cell].ref
 					
 				# Save wire to dictionary
 				var wire_id = next_wire_id
@@ -436,6 +437,7 @@ func _input(event: InputEvent):
 				var wire_data = {
 					"points": preview_line.points.duplicate(),
 					"source": link_source,
+					"destination": destination,
 					"color": Color(0.2, 0.9, 1.0),
 					"items": []
 				}
@@ -533,32 +535,51 @@ func _on_wire_renderer_draw():
 			wire_renderer.draw_polyline(w.points, w.color, 8.0, false)
 
 func _on_tick():
-	# Every tick, miners generate an item onto their output wire
+	# Group wires by their source Miner
+	var source_wires = {}
 	for wire_id in wire_paths:
 		var w = wire_paths[wire_id]
 		if w.source != null and is_instance_valid(w.source):
-			if w.source.name.begins_with("Mine"):
-				var val = 1.0
-				if "output_value" in w.source:
-					val = w.source.output_value
-					
-				var val_str = str(val)
-				if val == round(val):
-					val_str = str(int(val))
-				
-				var lbl = Label.new()
-				lbl.text = val_str
-				lbl.add_theme_font_size_override("font_size", 12)
-				lbl.add_theme_color_override("font_color", Color(1, 1, 1))
-				lbl.z_index = 20
-				add_child(lbl)
-				
-				var new_item = {
-					"value": val,
-					"progress": 0.0,
-					"visual": lbl
-				}
-				w.items.append(new_item)
+			if "output_value" in w.source:
+				if not source_wires.has(w.source):
+					source_wires[w.source] = []
+				source_wires[w.source].append(wire_id)
+
+	# Generate items using round-robin distribution
+	for source in source_wires:
+		var connected_wires = source_wires[source]
+		
+		if not miner_round_robin.has(source):
+			miner_round_robin[source] = 0
+			
+		var idx = miner_round_robin[source] % connected_wires.size()
+		var chosen_wire_id = connected_wires[idx]
+		
+		# Advance index for next tick
+		miner_round_robin[source] = (idx + 1) % connected_wires.size()
+		
+		var w = wire_paths[chosen_wire_id]
+		var val = 1.0
+		if "output_value" in source:
+			val = source.output_value
+			
+		var val_str = str(val)
+		if val == round(val):
+			val_str = str(int(val))
+		
+		var lbl = Label.new()
+		lbl.text = val_str
+		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_color_override("font_color", Color(1, 1, 1))
+		lbl.z_index = 20
+		add_child(lbl)
+		
+		var new_item = {
+			"value": val,
+			"progress": 0.0,
+			"visual": lbl
+		}
+		w.items.append(new_item)
 
 func _get_wire_length(pts: PackedVector2Array) -> float:
 	var total = 0.0
