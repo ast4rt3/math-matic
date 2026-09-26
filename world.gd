@@ -222,23 +222,30 @@ func _input(event: InputEvent):
 				return
 				
 			# If we are not placing or linking, try to delete a wire
-			for i in range(links.size() - 1, -1, -1):
-				var line = links[i]
-				var pts = line.points
-				var clicked = false
-				for j in range(pts.size() - 1):
-					var closest = Geometry2D.get_closest_point_to_segment(world_pos, pts[j], pts[j+1])
-					if world_pos.distance_to(closest) < 8.0:
-						clicked = true
-						break
-				if clicked:
-					var source = line.get_meta("source")
-					if is_instance_valid(source):
-						source.linked_to = null
-					line.queue_free()
-					links.remove_at(i)
-					_update_astar()
-					return
+			var clicked_cell = _pos_to_cell(world_pos)
+			
+			if grid_data.has(clicked_cell) and grid_data[clicked_cell].type == "wire":
+				var line = grid_data[clicked_cell].ref
+				
+				# Break the logical connection
+				var source = line.get_meta("source")
+				if is_instance_valid(source):
+					source.linked_to = null
+					
+				# Clean up GridManager data
+				var cells_to_erase = []
+				for c in grid_data:
+					if grid_data[c].type == "wire" and grid_data[c].ref == line:
+						cells_to_erase.append(c)
+				for c in cells_to_erase:
+					grid_data.erase(c)
+					
+				# Clean up visual Line2D and links array
+				links.erase(line)
+				line.queue_free()
+				
+				_update_astar()
+				return
 
 		# --- LEFT CLICK PRESSED ---
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
