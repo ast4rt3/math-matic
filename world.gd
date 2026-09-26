@@ -24,6 +24,10 @@ var link_source: Node2D = null
 var preview_line: Line2D = null
 var current_drawn_wire_cells: Array[Vector2i] = []
 
+# Hover Highlight
+var cursor_highlight: ReferenceRect
+var hovered_wire: Line2D = null
+
 # All drawn links (Still using Line2D visually for now to maintain feel)
 var links: Array = []
 
@@ -31,6 +35,19 @@ var links: Array = []
 var astar = AStarGrid2D.new()
 
 func _ready():
+	# Create the cursor highlight visually
+	cursor_highlight = ReferenceRect.new()
+	cursor_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
+	cursor_highlight.border_width = 2.0
+	cursor_highlight.editor_only = false
+	cursor_highlight.z_index = 100 # Ensure it draws on top of everything
+	
+	var bg = ColorRect.new()
+	bg.color = Color(1.0, 1.0, 1.0, 0.2)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cursor_highlight.add_child(bg)
+	add_child(cursor_highlight)
+
 	if has_node("UI"):
 		$UI.offset = Vector2.ZERO
 	if has_node("UI/MineButton"):
@@ -131,9 +148,49 @@ func _is_cell_in_building(cell: Vector2i, building: Node2D) -> bool:
 	var start_cell = _pos_to_cell(top_left)
 	return cell.x >= start_cell.x and cell.x < start_cell.x + 16 and cell.y >= start_cell.y and cell.y < start_cell.y + 16
 
+func _get_wire_in_tile(pos: Vector2) -> Line2D:
+	var snapped = _snap_to_grid(pos)
+	var top_left = snapped - Vector2(8, 8)
+	var start_cell = _pos_to_cell(top_left)
+	for x in range(4):
+		for y in range(4):
+			var c = start_cell + Vector2i(x, y)
+			if grid_data.has(c) and grid_data[c].type == "wire":
+				return grid_data[c].ref
+	return null
+
 func _process(delta: float):
+	# Update visual hover feedback
+	var mouse_pos = get_global_mouse_position()
+	var cell = _pos_to_cell(mouse_pos)
+	
+	# Reset previous wire highlight
+	if hovered_wire != null and is_instance_valid(hovered_wire):
+		hovered_wire.default_color = Color(0.2, 0.9, 1.0)
+	hovered_wire = null
+	
+	if grid_data.has(cell) and (grid_data[cell].type == "miner" or grid_data[cell].type == "core"):
+		var building = grid_data[cell].ref
+		if is_instance_valid(building):
+			cursor_highlight.global_position = building.global_position - Vector2(32, 32)
+			cursor_highlight.size = Vector2(64, 64)
+			cursor_highlight.visible = true
+	else:
+		var wire_ref = _get_wire_in_tile(mouse_pos)
+		if wire_ref != null and current_state == State.IDLE:
+			# Hide the box, just highlight the wire itself
+			cursor_highlight.visible = false
+			hovered_wire = wire_ref
+			if is_instance_valid(hovered_wire):
+				hovered_wire.default_color = Color(1.0, 1.0, 1.0) # Bright White
+		else:
+			var snapped = _snap_to_grid(mouse_pos)
+			cursor_highlight.global_position = snapped - Vector2(8, 8)
+			cursor_highlight.size = Vector2(16, 16)
+			cursor_highlight.visible = true
+		
 	if current_state == State.PLACING_MINE and mine_preview != null:
-		mine_preview.global_position = _snap_to_grid(get_global_mouse_position())
+		mine_preview.global_position = _snap_to_grid(mouse_pos)
 		if _can_place_building(mine_preview.global_position):
 			mine_preview.modulate = Color(1, 1, 1, 0.5)
 		else:
@@ -222,11 +279,8 @@ func _input(event: InputEvent):
 				return
 				
 			# If we are not placing or linking, try to delete a wire
-			var clicked_cell = _pos_to_cell(world_pos)
-			
-			if grid_data.has(clicked_cell) and grid_data[clicked_cell].type == "wire":
-				var line = grid_data[clicked_cell].ref
-				
+			var line = _get_wire_in_tile(world_pos)
+			if line != null:
 				# Break the logical connection
 				var source = line.get_meta("source")
 				if is_instance_valid(source):
