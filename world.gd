@@ -142,6 +142,11 @@ func _process(delta: float):
 		var start_cell = _pos_to_cell(link_source.global_position)
 		var end_cell = _pos_to_cell(get_global_mouse_position())
 		
+		# Safely limit the max drawing distance to prevent massive A* freezes
+		var diff = end_cell - start_cell
+		if abs(diff.x) > 150: end_cell.x = start_cell.x + sign(diff.x) * 150
+		if abs(diff.y) > 150: end_cell.y = start_cell.y + sign(diff.y) * 150
+		
 		# Clamp to valid grid bounds to completely prevent out of bounds crashes
 		start_cell.x = clamp(start_cell.x, astar.region.position.x, astar.region.end.x - 1)
 		start_cell.y = clamp(start_cell.y, astar.region.position.y, astar.region.end.y - 1)
@@ -224,6 +229,20 @@ func _process(delta: float):
 			# Fallback if totally trapped
 			preview_line.add_point(link_source.global_position)
 			preview_line.add_point(get_global_mouse_position())
+
+func _notification(what):
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		if current_state == State.DRAWING_WIRE:
+			current_state = State.IDLE
+			link_source = null
+			if preview_line:
+				preview_line.queue_free()
+				preview_line = null
+		elif current_state == State.PLACING_MINE:
+			current_state = State.IDLE
+			if mine_preview:
+				mine_preview.queue_free()
+				mine_preview = null
 
 func _input(event: InputEvent):
 	if event is InputEventMouseButton:
