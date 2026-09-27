@@ -46,7 +46,35 @@ var astar = AStarGrid2D.new()
 var target_zoom: Vector2 = Vector2(1, 1)
 var cam_pan_speed: float = 600.0
 
+var limit_left: float = -2000
+var limit_top: float = -2000
+var limit_right: float = 2000
+var limit_bottom: float = 2000
+
 func _ready():
+	var bounds_node = get_node_or_null("MapBounds")
+	if bounds_node and bounds_node is ReferenceRect:
+		limit_left = bounds_node.global_position.x
+		limit_top = bounds_node.global_position.y
+		limit_right = limit_left + bounds_node.size.x
+		limit_bottom = limit_top + bounds_node.size.y
+		# Hide it in game since we draw our own cyan border
+		bounds_node.visible = false 
+	elif ground_layer and ground_layer.tile_set:
+		var rect = ground_layer.get_used_rect()
+		if rect.size.x > 0 and rect.size.y > 0:
+			var tile_size = ground_layer.tile_set.tile_size
+			limit_left = rect.position.x * tile_size.x
+			limit_top = rect.position.y * tile_size.y
+			limit_right = (rect.position.x + rect.size.x) * tile_size.x
+			limit_bottom = (rect.position.y + rect.size.y) * tile_size.y
+			
+	if camera:
+		camera.limit_left = int(limit_left)
+		camera.limit_top = int(limit_top)
+		camera.limit_right = int(limit_right)
+		camera.limit_bottom = int(limit_bottom)
+		
 	wire_renderer = Node2D.new()
 	wire_renderer.z_index = 10
 	add_child(wire_renderer)
@@ -239,6 +267,10 @@ func _input(event: InputEvent):
 			var last_tile = preview_points[-1]
 			
 			if last_tile != target_tile:
+				var t_pos = _wire_tile_to_pos(target_tile)
+				if t_pos.x < limit_left or t_pos.y < limit_top or t_pos.x > limit_right or t_pos.y > limit_bottom:
+					return
+					
 				var idx = preview_points.find(target_tile)
 				if idx != -1:
 					preview_points.resize(idx + 1)
@@ -331,6 +363,10 @@ func _input(event: InputEvent):
 func _can_place_building(pos: Vector2, b_type: String) -> bool:
 	var size = 32 if b_type == "miner" else 64
 	var top_left = pos - Vector2(size/2, size/2)
+	
+	if top_left.x < limit_left or top_left.y < limit_top or (top_left.x + size) > limit_right or (top_left.y + size) > limit_bottom:
+		return false
+		
 	var start_cell = _pos_to_cell(top_left)
 	var cells = size / 4
 	for x in range(cells):
@@ -393,6 +429,24 @@ func _process(delta: float):
 		if Input.is_key_pressed(KEY_D): move_dir.x += 1
 		if move_dir != Vector2.ZERO:
 			camera.position += move_dir.normalized() * cam_pan_speed * delta * (1.0 / camera.zoom.x)
+			
+		# Enforce zoom limits to strictly prevent seeing beyond map boundaries
+		var map_w = limit_right - limit_left
+		var map_h = limit_bottom - limit_top
+		var vp_size = get_viewport_rect().size
+		
+		var half_w = (vp_size.x / camera.zoom.x) / 2.0
+		var half_h = (vp_size.y / camera.zoom.y) / 2.0
+		
+		camera.position.x = clamp(camera.position.x, limit_left + half_w, limit_right - half_w)
+		camera.position.y = clamp(camera.position.y, limit_top + half_h, limit_bottom - half_h)
+		
+		var min_zoom_x = vp_size.x / map_w if map_w > 0 else 0.2
+		var min_zoom_y = vp_size.y / map_h if map_h > 0 else 0.2
+		var min_zoom = max(max(min_zoom_x, min_zoom_y), 0.2)
+		
+		target_zoom.x = clamp(target_zoom.x, min_zoom, 3.0)
+		target_zoom.y = clamp(target_zoom.y, min_zoom, 3.0)
 		camera.zoom = camera.zoom.lerp(target_zoom, 10.0 * delta)
 
 	tick_accumulator += delta
