@@ -42,6 +42,10 @@ var WIRE_DIRS = [
 var current_wire_dir_index: int = 0
 var astar = AStarGrid2D.new()
 
+@onready var camera: Camera2D = $Camera2D
+var target_zoom: Vector2 = Vector2(1, 1)
+var cam_pan_speed: float = 600.0
+
 func _ready():
 	wire_renderer = Node2D.new()
 	wire_renderer.z_index = 10
@@ -195,6 +199,16 @@ func start_placing_adder():
 		add_child(adder_preview)
 
 func _input(event: InputEvent):
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			target_zoom *= 1.2
+			target_zoom.x = min(target_zoom.x, 3.0)
+			target_zoom.y = min(target_zoom.y, 3.0)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			target_zoom /= 1.2
+			target_zoom.x = max(target_zoom.x, 0.2)
+			target_zoom.y = max(target_zoom.y, 0.2)
+			
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_E or event.keycode == KEY_Q:
 			var mouse_pos = get_global_mouse_position()
@@ -217,6 +231,9 @@ func _input(event: InputEvent):
 					current_wire_dir_index = (current_wire_dir_index - 1 + 8) % 8
 			
 	if event is InputEventMouseMotion:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_MIDDLE) and camera:
+			camera.position -= event.relative / camera.zoom
+			
 		if current_state == State.DRAWING_WIRE and preview_points.size() > 0:
 			var target_tile = _pos_to_wire_tile(get_global_mouse_position())
 			var last_tile = preview_points[-1]
@@ -368,6 +385,16 @@ func _on_wire_renderer_draw():
 				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0, 0.5))
 
 func _process(delta: float):
+	if camera:
+		var move_dir = Vector2.ZERO
+		if Input.is_key_pressed(KEY_W): move_dir.y -= 1
+		if Input.is_key_pressed(KEY_S): move_dir.y += 1
+		if Input.is_key_pressed(KEY_A): move_dir.x -= 1
+		if Input.is_key_pressed(KEY_D): move_dir.x += 1
+		if move_dir != Vector2.ZERO:
+			camera.position += move_dir.normalized() * cam_pan_speed * delta * (1.0 / camera.zoom.x)
+		camera.zoom = camera.zoom.lerp(target_zoom, 10.0 * delta)
+
 	tick_accumulator += delta
 	while tick_accumulator >= tick_rate:
 		tick_accumulator -= tick_rate
