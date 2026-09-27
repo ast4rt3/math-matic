@@ -536,7 +536,7 @@ func _process(delta: float):
 			var start = _wire_tile_to_pos(t) - Vector2(w.dir) * 8.0
 			var end = _wire_tile_to_pos(t) + Vector2(w.dir) * 8.0
 			var frac = w.item.progress / 16.0
-			w.item.visual.global_position = start.lerp(end, frac) - Vector2(8, 12)
+			w.item.visual.global_position = start.lerp(end, frac)
 			
 	# Update UI Button highlights
 	if has_node("UI/MineButton"):
@@ -637,12 +637,24 @@ func _on_tick():
 						var val = 1.0
 						if "output_value" in child: val = child.output_value
 						if child.has_method("consume_output"): child.consume_output()
+						var container = Node2D.new()
+						container.z_index = 20
+						
+						var bg = Sprite2D.new()
+						bg.texture = preload("res://asset/itemContainer.png")
+						container.add_child(bg)
+						
 						var lbl = Label.new()
 						lbl.text = str(int(val)) if val == round(val) else str(val)
 						lbl.add_theme_font_size_override("font_size", 12)
-						lbl.z_index = 20
-						add_child(lbl)
-						wire_grid[t].item = { "value": val, "progress": 0.0, "visual": lbl }
+						lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+						lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+						lbl.position = Vector2(-16, -16)
+						lbl.size = Vector2(32, 32)
+						container.add_child(lbl)
+						
+						add_child(container)
+						wire_grid[t].item = { "value": val, "progress": 0.0, "visual": container }
 						
 						miner_round_robin[child] = (idx + 1) % valid_outputs.size()
 						break # Only output 1 item per tick per miner
