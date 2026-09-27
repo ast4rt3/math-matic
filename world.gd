@@ -422,6 +422,12 @@ func _process(delta: float):
 			var frac = w.item.progress / 16.0
 			w.item.visual.global_position = start.lerp(end, frac) - Vector2(8, 12)
 			
+	# Update UI Button highlights
+	if has_node("UI/MineButton"):
+		$UI/MineButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_MINE else Color(1, 1, 1)
+	if has_node("UI/AdderButton"):
+		$UI/AdderButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_ADDER else Color(1, 1, 1)
+		
 	# Update highlights
 	var mouse_pos = get_global_mouse_position()
 	var snapped_pos = _snap_to_grid(mouse_pos)

@@ -21,7 +21,7 @@ shape = SubResource("RectangleShape2D_6hf0w")
 position = Vector2(0, 30)
 
 [node name="CounterLabel" type="Label" parent="." unique_id=1079859296]
-offset_left = -19.0
-offset_top = -32.0
-offset_right = 21.0
-offset_bottom = -9.0
+offset_left = -32.0
+offset_top = -54.0
+offset_right = 32.0
+offset_bottom = -31.0
