@@ -368,7 +368,7 @@ func _input(event: InputEvent):
 				
 			var wire_id = _get_wire_in_tile(world_pos)
 			if wire_id != -1:
-				_delete_wire(wire_id)
+				_delete_wire(wire_id, world_pos)
 				return
 
 		# --- LEFT CLICK PRESSED ---
@@ -540,16 +540,12 @@ func _delete_building(building: Node2D):
 	building.queue_free()
 	_update_astar()
 
-func _delete_wire(wire_id: int):
+func _delete_wire(wire_id: int, cut_pos: Vector2 = Vector2.ZERO):
 	if not wire_paths.has(wire_id): return
 	var line_data = wire_paths[wire_id]
-	if is_instance_valid(line_data.source):
-		line_data.source.linked_to = null
-		
-	for item in line_data.items:
-		if is_instance_valid(item.visual):
-			item.visual.queue_free()
-			
+	var pts = line_data.points
+	
+	# 1. Erase old grid data
 	var cells_to_erase = []
 	for c in grid_data:
 		if grid_data[c].type == "wire" and grid_data[c].wire_id == wire_id:
@@ -557,6 +553,67 @@ func _delete_wire(wire_id: int):
 	for c in cells_to_erase:
 		grid_data.erase(c)
 		
+	# 2. Check if this is a split
+	var cut_idx = -1
+	if cut_pos != Vector2.ZERO:
+		var snapped_cut = _snap_to_grid(cut_pos)
+		for i in range(pts.size()):
+			if pts[i].distance_to(snapped_cut) < 8.0:
+				cut_idx = i
+				break
+				
+	if cut_idx != -1 and pts.size() > 2:
+		# Splitting
+		var pts_A = pts.slice(0, cut_idx)
+		var pts_B = pts.slice(cut_idx + 1)
+		
+		var dist_A = _get_wire_length(pts_A) if pts_A.size() > 0 else 0.0
+		var gap = _get_wire_length(pts.slice(0, cut_idx+1))
+		
+		var items_A = []
+		var items_B = []
+		
+		for item in line_data.items:
+			if item.progress <= dist_A:
+				items_A.append(item)
+			elif item.progress > gap:
+				item.progress -= gap
+				items_B.append(item)
+			else:
+				if is_instance_valid(item.visual): item.visual.queue_free()
+				
+		if pts_A.size() > 1:
+			var wire_a_id = next_wire_id
+			next_wire_id += 1
+			wire_paths[wire_a_id] = {
+				"points": pts_A, "source": line_data.source, "destination": null,
+				"color": line_data.color, "items": items_A
+			}
+			for p in pts_A:
+				grid_data[_pos_to_cell(p)] = { "type": "wire", "wire_id": wire_a_id }
+		else:
+			for item in items_A:
+				if is_instance_valid(item.visual): item.visual.queue_free()
+				
+		if pts_B.size() > 1:
+			var wire_b_id = next_wire_id
+			next_wire_id += 1
+			wire_paths[wire_b_id] = {
+				"points": pts_B, "source": null, "destination": line_data.destination,
+				"color": line_data.color, "items": items_B
+			}
+			for p in pts_B:
+				grid_data[_pos_to_cell(p)] = { "type": "wire", "wire_id": wire_b_id }
+		else:
+			for item in items_B:
+				if is_instance_valid(item.visual): item.visual.queue_free()
+				
+	else:
+		# Full delete (or wire too short to split)
+		for item in line_data.items:
+			if is_instance_valid(item.visual):
+				item.visual.queue_free()
+				
 	wire_paths.erase(wire_id)
 	_update_astar()
 	wire_renderer.queue_redraw()
