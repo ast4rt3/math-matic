@@ -51,6 +51,8 @@ var limit_top: float = -2000
 var limit_right: float = 2000
 var limit_bottom: float = 2000
 
+var debug_mode: bool = false
+
 func _ready():
 	var bounds_node = get_node_or_null("MapBounds")
 	if bounds_node and bounds_node is ReferenceRect:
@@ -238,7 +240,10 @@ func _input(event: InputEvent):
 			target_zoom.y = max(target_zoom.y, 0.2)
 			
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E or event.keycode == KEY_Q:
+		if event.keycode == KEY_F3:
+			debug_mode = not debug_mode
+			if wire_renderer: wire_renderer.queue_redraw()
+		elif event.keycode == KEY_E or event.keycode == KEY_Q:
 			var mouse_pos = get_global_mouse_position()
 			var tile_pos = _pos_to_wire_tile(mouse_pos)
 			
@@ -407,18 +412,37 @@ func _on_wire_renderer_draw():
 	for t in wire_grid:
 		var center = _wire_tile_to_pos(t)
 		var d = wire_grid[t].dir
-		wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
-		wire_renderer.draw_line(center, center + Vector2(d) * 8.0, Color(1, 1, 1), 2.0)
+		if debug_mode:
+			wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
+			wire_renderer.draw_line(center, center + Vector2(d) * 8.0, Color(1, 1, 1), 2.0)
+		else:
+			wire_renderer.draw_line(center - Vector2(d) * 8.0, center + Vector2(d) * 8.0, Color(0.25, 0.25, 0.25), 14.0)
 		
 	# Draw preview
 	if preview_points.size() > 0:
 		for i in range(preview_points.size()):
-			var center = _wire_tile_to_pos(preview_points[i])
+			var p = preview_points[i]
+			var center = _wire_tile_to_pos(p)
 			var cell = _pos_to_cell(center)
+			
+			var dir = WIRE_DIRS[current_wire_dir_index]
+			if preview_points.size() > 1:
+				if i < preview_points.size() - 1:
+					dir = preview_points[i+1] - p
+				elif i > 0:
+					dir = p - preview_points[i-1]
+					
+			var is_blocked = false
 			if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner" or grid_data[cell].type == "adder"):
-				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(1.0, 0.0, 0.0, 0.5))
+				is_blocked = true
+				
+			if debug_mode:
+				var c = Color(1.0, 0.0, 0.0, 0.5) if is_blocked else Color(0.2, 0.9, 1.0, 0.5)
+				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), c)
+				wire_renderer.draw_line(center, center + Vector2(dir) * 8.0, Color(1, 1, 1, 0.5), 2.0)
 			else:
-				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0, 0.5))
+				var c = Color(1.0, 0.0, 0.0, 0.5) if is_blocked else Color(0.25, 0.25, 0.25, 0.6)
+				wire_renderer.draw_line(center - Vector2(dir) * 8.0, center + Vector2(dir) * 8.0, c, 14.0)
 
 func _process(delta: float):
 	if camera:
