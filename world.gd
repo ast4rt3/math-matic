@@ -98,16 +98,19 @@ func _ready():
 	_update_astar()
 
 func _add_building_to_grid(building: Node2D, b_type: String):
-	var top_left = building.global_position - Vector2(32, 32)
+	var size = 32 if b_type == "miner" else 64
+	var top_left = building.global_position - Vector2(size/2, size/2)
 	var start_cell = _pos_to_cell(top_left)
-	for x in range(16):
-		for y in range(16):
+	var cells = size / 4
+	for x in range(cells):
+		for y in range(cells):
 			var c = start_cell + Vector2i(x, y)
 			grid_data[c] = { "type": b_type, "ref": building }
 			
 	# Bulldoze any wires underneath the new building
-	for wx in range(4):
-		for wy in range(4):
+	var wire_tiles = size / 16
+	for wx in range(wire_tiles):
+		for wy in range(wire_tiles):
 			var tile = _pos_to_wire_tile(top_left + Vector2(wx * 16 + 8, wy * 16 + 8))
 			if wire_grid.has(tile):
 				if wire_grid[tile].item != null and is_instance_valid(wire_grid[tile].item.visual):
@@ -173,7 +176,7 @@ func start_placing_mine():
 	current_state = State.PLACING_MINE
 	if mine_preview == null:
 		mine_preview = Sprite2D.new()
-		mine_preview.texture = preload("res://asset/Miner.png")
+		mine_preview.texture = preload("res://asset/miner32.png")
 		mine_preview.modulate.a = 0.5
 		add_child(mine_preview)
 
@@ -268,12 +271,12 @@ func _input(event: InputEvent):
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			if current_state == State.PLACING_MINE:
 				var snapped_pos = _snap_building(world_pos)
-				if _can_place_building(snapped_pos):
+				if _can_place_building(snapped_pos, "miner"):
 					_place_mine(snapped_pos)
 				return
 			if current_state == State.PLACING_ADDER:
 				var snapped_pos = _snap_building(world_pos)
-				if _can_place_building(snapped_pos):
+				if _can_place_building(snapped_pos, "adder"):
 					_place_adder(snapped_pos)
 				return
 			if current_state == State.IDLE:
@@ -308,10 +311,16 @@ func _input(event: InputEvent):
 				preview_points.clear()
 				wire_renderer.queue_redraw()
 
-func _can_place_building(pos: Vector2) -> bool:
-	for child in get_children():
-		if child.name == "Core" or child.has_node("OutputPort"):
-			if child.global_position.distance_to(pos) < 1.0: return false
+func _can_place_building(pos: Vector2, b_type: String) -> bool:
+	var size = 32 if b_type == "miner" else 64
+	var top_left = pos - Vector2(size/2, size/2)
+	var start_cell = _pos_to_cell(top_left)
+	var cells = size / 4
+	for x in range(cells):
+		for y in range(cells):
+			var c = start_cell + Vector2i(x, y)
+			if grid_data.has(c):
+				return false
 	return true
 
 func _place_mine(world_pos: Vector2):
@@ -442,8 +451,9 @@ func _process(delta: float):
 	building_highlight.visible = false
 	
 	if current_state == State.PLACING_MINE or current_state == State.PLACING_ADDER:
-		building_highlight.global_position = _snap_building(mouse_pos) - Vector2(32, 32)
-		building_highlight.size = Vector2(64, 64)
+		var size = 32 if current_state == State.PLACING_MINE else 64
+		building_highlight.global_position = _snap_building(mouse_pos) - Vector2(size/2, size/2)
+		building_highlight.size = Vector2(size, size)
 		building_highlight.visible = true
 		if mine_preview:
 			mine_preview.global_position = _snap_building(mouse_pos)
@@ -455,8 +465,10 @@ func _process(delta: float):
 			hovered_building = grid_data[cell_pos].ref
 			
 		if hovered_building != null:
-			building_hover_highlight.global_position = hovered_building.global_position - Vector2(32, 32)
-			building_hover_highlight.size = Vector2(64, 64)
+			var is_miner = (grid_data[cell_pos].type == "miner")
+			var size = 32 if is_miner else 64
+			building_hover_highlight.global_position = hovered_building.global_position - Vector2(size/2, size/2)
+			building_hover_highlight.size = Vector2(size, size)
 			building_hover_highlight.visible = true
 		elif wire_grid.has(tile_pos):
 			wire_hover_highlight.global_position = snapped_pos - Vector2(8, 8)
@@ -478,14 +490,17 @@ func _on_tick():
 	for child in get_children():
 		if child.has_node("OutputPort") and child.name != "Core":
 			if child.has_method("can_output") and not child.can_output(): continue
-			var top_left = child.global_position - Vector2(32, 32)
+			var is_miner = not child.has_method("can_receive")
+			var size = 32 if is_miner else 64
+			var top_left = child.global_position - Vector2(size/2, size/2)
+			var wire_tiles = size / 16
 			# Find an adjacent wire tile pointing AWAY from the miner
 			var output_tiles = []
-			for x in [-1, 4]:
-				for y in range(4):
+			for x in [-1, wire_tiles]:
+				for y in range(wire_tiles):
 					output_tiles.append(_pos_to_wire_tile(top_left + Vector2(x * 16 + 8, y * 16 + 8)))
-			for y in [-1, 4]:
-				for x in range(4):
+			for y in [-1, wire_tiles]:
+				for x in range(wire_tiles):
 					output_tiles.append(_pos_to_wire_tile(top_left + Vector2(x * 16 + 8, y * 16 + 8)))
 					
 			var valid_outputs = []
