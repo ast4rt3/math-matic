@@ -1,0 +1,20 @@
+[gd_scene format=3 uid="uid://c7w8w2x4f1b2c"]
+
+[ext_resource type="Texture2D" uid="uid://b6q3j7a4e8d9c" path="res://asset/adder.png" id="1_tex"]
+[ext_resource type="Script" uid="uid://d9f4f645831e9" path="res://buildings/adder.gd" id="2_scr"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_add"]
+size = Vector2(64, 64)
+
+[node name="Adder" type="Node2D" unique_id=234234234]
+script = ExtResource("2_scr")
+
+[node name="Sprite" type="Sprite2D" parent="." unique_id=345345345]
+texture = ExtResource("1_tex")
+
+[node name="Clickarea" type="Area2D" parent="." unique_id=456456456]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Clickarea" unique_id=567567567]
+shape = SubResource("RectangleShape2D_add")
+
+[node name="OutputPort" type="Node2D" parent="." unique_id=678678678]

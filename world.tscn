@@ -77,3 +77,12 @@ offset_right = 148.0
 offset_bottom = 631.0
 action_mode = 0
 text = "Place Mine"
+
+[node name="AdderButton" type="Button" parent="UI"]
+offset_left = 168.0
+offset_top = 568.0
+offset_right = 298.0
+offset_bottom = 631.0
+action_mode = 0
+text = "Place Adder"
+

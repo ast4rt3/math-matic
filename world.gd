@@ -3,7 +3,7 @@ extends Node2D
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var core: Node2D = $Core
 
-enum State { IDLE, PLACING_MINE, DRAWING_WIRE, DELETING }
+enum State { IDLE, PLACING_MINE, PLACING_ADDER, DRAWING_WIRE, DELETING }
 var current_state: State = State.IDLE
 var tick_accumulator: float = 0.0
 var tick_rate: float = 0.4 
@@ -18,6 +18,9 @@ var wire_grid: Dictionary = {} # Vector2i -> { "dir": Vector2i, "item": Dictiona
 
 var mine_scene = preload("res://buildings/Mine.tscn")
 var mine_preview: Sprite2D = null
+
+var adder_scene = preload("res://buildings/Adder.tscn")
+var adder_preview: Sprite2D = null
 
 var preview_points: Array[Vector2i] = []
 var wire_renderer: Node2D
@@ -59,12 +62,8 @@ func _ready():
 		$UI.offset = Vector2.ZERO
 	if has_node("UI/MineButton"):
 		$UI/MineButton.pressed.connect(start_placing_mine)
-		var wire_btn = Button.new()
-		wire_btn.text = "Draw Wire"
-		wire_btn.name = "WireButton"
-		wire_btn.position = Vector2(0, $UI/MineButton.size.y + 10) if $UI/MineButton.size.y > 0 else Vector2(0, 40)
-		wire_btn.pressed.connect(start_drawing_wire)
-		$UI.add_child(wire_btn)
+	if has_node("UI/AdderButton"):
+		$UI/AdderButton.pressed.connect(start_placing_adder)
 	
 	astar.region = Rect2i(-1600, -1600, 3200, 3200)
 	astar.cell_size = Vector2(4, 4)
@@ -146,6 +145,20 @@ func start_placing_mine():
 		mine_preview.modulate.a = 0.5
 		add_child(mine_preview)
 
+func start_placing_adder():
+	if current_state == State.PLACING_ADDER:
+		current_state = State.IDLE
+		if adder_preview:
+			adder_preview.queue_free()
+			adder_preview = null
+		return
+	current_state = State.PLACING_ADDER
+	if adder_preview == null:
+		adder_preview = Sprite2D.new()
+		adder_preview.texture = preload("res://asset/adder.png")
+		adder_preview.modulate.a = 0.5
+		add_child(adder_preview)
+
 func _input(event: InputEvent):
 	if event is InputEventMouseMotion:
 		if current_state == State.DRAWING_WIRE and preview_points.size() > 0:
@@ -178,12 +191,15 @@ func _input(event: InputEvent):
 			if current_state == State.PLACING_MINE:
 				start_placing_mine()
 				return
+			if current_state == State.PLACING_ADDER:
+				start_placing_adder()
+				return
 			if current_state == State.DRAWING_WIRE:
 				start_drawing_wire()
 				return
 				
 			var cell_4x4 = _pos_to_cell(world_pos)
-			if grid_data.has(cell_4x4) and grid_data[cell_4x4].type == "miner":
+			if grid_data.has(cell_4x4) and (grid_data[cell_4x4].type == "miner" or grid_data[cell_4x4].type == "adder"):
 				_delete_building(grid_data[cell_4x4].ref)
 				return
 				
@@ -199,6 +215,11 @@ func _input(event: InputEvent):
 				var snapped_pos = _snap_building(world_pos)
 				if _can_place_building(snapped_pos):
 					_place_mine(snapped_pos)
+				return
+			if current_state == State.PLACING_ADDER:
+				var snapped_pos = _snap_building(world_pos)
+				if _can_place_building(snapped_pos):
+					_place_adder(snapped_pos)
 				return
 			if current_state == State.IDLE:
 				start_drawing_wire()
@@ -219,7 +240,7 @@ func _input(event: InputEvent):
 					elif i > 0:
 						dir = p - preview_points[i-1] # Keep last direction
 						
-					if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner"):
+					if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner" or grid_data[cell].type == "adder"):
 						continue # Don't place wires inside buildings!
 						
 					if not wire_grid.has(p):
@@ -245,11 +266,18 @@ func _place_mine(world_pos: Vector2):
 	_add_building_to_grid(mine, "miner")
 	_update_astar()
 
+func _place_adder(world_pos: Vector2):
+	var adder = adder_scene.instantiate()
+	adder.position = world_pos
+	add_child(adder)
+	_add_building_to_grid(adder, "adder")
+	_update_astar()
+
 func _delete_building(building: Node2D):
 	if building.name == "Core": return
 	var cells_to_erase = []
 	for c in grid_data:
-		if grid_data[c].type == "miner" and grid_data[c].ref == building:
+		if (grid_data[c].type == "miner" or grid_data[c].type == "adder") and grid_data[c].ref == building:
 			cells_to_erase.append(c)
 	for c in cells_to_erase:
 		grid_data.erase(c)
@@ -307,13 +335,21 @@ func _process(delta: float):
 				
 				if grid_data.has(cell_4x4):
 					var b = grid_data[cell_4x4]
-					if b.type == "core" or b.type == "miner":
-						hit_building = true
-						if b.ref.has_method("receive"):
-							b.ref.receive(w.item.value)
-						if is_instance_valid(w.item.visual): w.item.visual.queue_free()
-						w.item = null
-						moved_any = true
+					if b.type == "core" or b.type == "miner" or b.type == "adder":
+						var can_receive = true
+						if b.ref.has_method("can_receive"):
+							can_receive = b.ref.can_receive()
+							
+						if can_receive:
+							hit_building = true
+							if b.ref.has_method("receive"):
+								b.ref.receive(w.item.value)
+							if is_instance_valid(w.item.visual): w.item.visual.queue_free()
+							w.item = null
+							moved_any = true
+						else:
+							# If buffer is full, treat it as a blockage and keep the item on the wire
+							hit_building = true
 						
 				if not hit_building and wire_grid.has(next_t):
 					var next_w = wire_grid[next_t]
@@ -336,14 +372,16 @@ func _process(delta: float):
 	var mouse_pos = get_global_mouse_position()
 	cursor_highlight.global_position = _snap_to_grid(mouse_pos) - Vector2(8, 8)
 	cursor_highlight.size = Vector2(16, 16)
-	cursor_highlight.visible = current_state != State.PLACING_MINE
+	cursor_highlight.visible = current_state != State.PLACING_MINE and current_state != State.PLACING_ADDER
 	
-	if current_state == State.PLACING_MINE:
+	if current_state == State.PLACING_MINE or current_state == State.PLACING_ADDER:
 		building_highlight.global_position = _snap_building(mouse_pos) - Vector2(32, 32)
 		building_highlight.size = Vector2(64, 64)
 		building_highlight.visible = true
 		if mine_preview:
 			mine_preview.global_position = _snap_building(mouse_pos)
+		if adder_preview:
+			adder_preview.global_position = _snap_building(mouse_pos)
 	else:
 		building_highlight.visible = false
 
@@ -351,6 +389,7 @@ func _on_tick():
 	# Generate items from Miners into adjacent wires
 	for child in get_children():
 		if child.has_node("OutputPort") and child.name != "Core":
+			if child.has_method("can_output") and not child.can_output(): continue
 			var top_left = child.global_position - Vector2(32, 32)
 			# Find an adjacent wire tile pointing AWAY from the miner
 			var output_tiles = []
@@ -364,7 +403,17 @@ func _on_tick():
 			var valid_outputs = []
 			for t in output_tiles:
 				if wire_grid.has(t):
-					valid_outputs.append(t)
+					var w = wire_grid[t]
+					var next_t = t + w.dir
+					var next_pos = _wire_tile_to_pos(next_t)
+					var next_cell = _pos_to_cell(next_pos)
+					
+					var points_into_me = false
+					if grid_data.has(next_cell) and grid_data[next_cell].ref == child:
+						points_into_me = true
+						
+					if not points_into_me:
+						valid_outputs.append(t)
 					
 			if valid_outputs.size() > 0:
 				if not miner_round_robin.has(child):
@@ -379,6 +428,7 @@ func _on_tick():
 						# Generate!
 						var val = 1.0
 						if "output_value" in child: val = child.output_value
+						if child.has_method("consume_output"): child.consume_output()
 						var lbl = Label.new()
 						lbl.text = str(int(val)) if val == round(val) else str(val)
 						lbl.add_theme_font_size_override("font_size", 12)
