@@ -152,7 +152,10 @@ func _input(event: InputEvent):
 				var steps = 0
 				while current != target_tile and steps < 50:
 					steps += 1
-					if abs(target_tile.x - current.x) > abs(target_tile.y - current.y):
+					if abs(target_tile.x - current.x) > 0 and abs(target_tile.y - current.y) > 0:
+						current.x += sign(target_tile.x - current.x)
+						current.y += sign(target_tile.y - current.y)
+					elif abs(target_tile.x - current.x) > 0:
 						current.x += sign(target_tile.x - current.x)
 					else:
 						current.y += sign(target_tile.y - current.y)
