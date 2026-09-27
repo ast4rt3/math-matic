@@ -11,6 +11,8 @@ var tick_rate: float = 0.4
 # 4x4 Grid for Buildings and AStar
 var grid_data: Dictionary = {}
 
+var miner_round_robin: Dictionary = {} # Node2D -> int
+
 # 16x16 Grid for Wires
 var wire_grid: Dictionary = {} # Vector2i -> { "dir": Vector2i, "item": Dictionary }
 
@@ -330,15 +332,30 @@ func _on_tick():
 				for x in range(4):
 					output_tiles.append(_pos_to_wire_tile(top_left + Vector2(x * 16 + 8, y * 16 + 8)))
 					
+			var valid_outputs = []
 			for t in output_tiles:
-				if wire_grid.has(t) and wire_grid[t].item == null:
-					# Generate!
-					var val = 1.0
-					if "output_value" in child: val = child.output_value
-					var lbl = Label.new()
-					lbl.text = str(int(val)) if val == round(val) else str(val)
-					lbl.add_theme_font_size_override("font_size", 12)
-					lbl.z_index = 20
-					add_child(lbl)
-					wire_grid[t].item = { "value": val, "progress": 0.0, "visual": lbl }
-					break # Only output 1 item per tick per miner
+				if wire_grid.has(t):
+					valid_outputs.append(t)
+					
+			if valid_outputs.size() > 0:
+				if not miner_round_robin.has(child):
+					miner_round_robin[child] = 0
+				
+				var start_idx = miner_round_robin[child]
+				for i in range(valid_outputs.size()):
+					var idx = (start_idx + i) % valid_outputs.size()
+					var t = valid_outputs[idx]
+					
+					if wire_grid[t].item == null:
+						# Generate!
+						var val = 1.0
+						if "output_value" in child: val = child.output_value
+						var lbl = Label.new()
+						lbl.text = str(int(val)) if val == round(val) else str(val)
+						lbl.add_theme_font_size_override("font_size", 12)
+						lbl.z_index = 20
+						add_child(lbl)
+						wire_grid[t].item = { "value": val, "progress": 0.0, "visual": lbl }
+						
+						miner_round_robin[child] = (idx + 1) % valid_outputs.size()
+						break # Only output 1 item per tick per miner
