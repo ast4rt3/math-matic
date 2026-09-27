@@ -113,6 +113,13 @@ func _snap_to_grid(pos: Vector2) -> Vector2:
 		floor(pos.y / tile_size) * tile_size + tile_size / 2
 	)
 
+func _snap_building(pos: Vector2) -> Vector2:
+	var tile_size = 16
+	return Vector2(
+		round(pos.x / tile_size) * tile_size,
+		round(pos.y / tile_size) * tile_size
+	)
+
 func start_drawing_wire():
 	if current_state == State.DRAWING_WIRE:
 		current_state = State.IDLE
@@ -189,7 +196,7 @@ func _input(event: InputEvent):
 
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			if current_state == State.PLACING_MINE:
-				var snapped_pos = _snap_to_grid(world_pos)
+				var snapped_pos = _snap_building(world_pos)
 				if _can_place_building(snapped_pos):
 					_place_mine(snapped_pos)
 				return
@@ -203,11 +210,17 @@ func _input(event: InputEvent):
 			if current_state == State.DRAWING_WIRE and preview_points.size() > 0:
 				for i in range(preview_points.size()):
 					var p = preview_points[i]
+					var center = _wire_tile_to_pos(p)
+					var cell = _pos_to_cell(center)
+					
 					var dir = Vector2i(1, 0)
 					if i < preview_points.size() - 1:
 						dir = preview_points[i+1] - p
 					elif i > 0:
 						dir = p - preview_points[i-1] # Keep last direction
+						
+					if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner"):
+						continue # Don't place wires inside buildings!
 						
 					if not wire_grid.has(p):
 						wire_grid[p] = { "dir": dir, "item": null }
@@ -255,7 +268,11 @@ func _on_wire_renderer_draw():
 	if preview_points.size() > 0:
 		for i in range(preview_points.size()):
 			var center = _wire_tile_to_pos(preview_points[i])
-			wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0, 0.5))
+			var cell = _pos_to_cell(center)
+			if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner"):
+				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(1.0, 0.0, 0.0, 0.5))
+			else:
+				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0, 0.5))
 
 func _process(delta: float):
 	tick_accumulator += delta
@@ -319,7 +336,16 @@ func _process(delta: float):
 	var mouse_pos = get_global_mouse_position()
 	cursor_highlight.global_position = _snap_to_grid(mouse_pos) - Vector2(8, 8)
 	cursor_highlight.size = Vector2(16, 16)
-	cursor_highlight.visible = true
+	cursor_highlight.visible = current_state != State.PLACING_MINE
+	
+	if current_state == State.PLACING_MINE:
+		building_highlight.global_position = _snap_building(mouse_pos) - Vector2(32, 32)
+		building_highlight.size = Vector2(64, 64)
+		building_highlight.visible = true
+		if mine_preview:
+			mine_preview.global_position = _snap_building(mouse_pos)
+	else:
+		building_highlight.visible = false
 
 func _on_tick():
 	# Generate items from Miners into adjacent wires
