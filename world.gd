@@ -455,6 +455,13 @@ func _process(delta: float):
 			wire_hover_highlight.visible = true
 		else:
 			cursor_highlight.global_position = snapped_pos
+			
+			if current_state == State.DRAWING_WIRE and preview_points.size() > 1:
+				var last_dir = preview_points[-1] - preview_points[-2]
+				var w_idx = WIRE_DIRS.find(last_dir)
+				if w_idx != -1:
+					current_wire_dir_index = w_idx
+					
 			cursor_highlight.rotation = current_wire_dir_index * PI / 4.0
 			cursor_highlight.visible = true
 
