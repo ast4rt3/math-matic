@@ -70,6 +70,7 @@ transform = Transform2D(1, 0, 0, 1, 2000, 0)
 [node name="ScreenReference" type="ReferenceRect" parent="UI" unique_id=538733033]
 offset_right = 1152.0
 offset_bottom = 648.0
+border_color = Color(4.813075e-07, 0.58969957, 0.7504738, 1)
 border_width = 4.7
 
 [node name="MineButton" type="Button" parent="UI" unique_id=586447805]
@@ -89,7 +90,7 @@ offset_top = 519.0
 offset_right = 163.0
 offset_bottom = 637.0
 action_mode = 0
-text = "adder"
+text = "Adder"
 icon = ExtResource("6_pkg7o")
 icon_alignment = 1
 vertical_icon_alignment = 2

@@ -25,9 +25,21 @@ var adder_preview: Sprite2D = null
 var preview_points: Array[Vector2i] = []
 var wire_renderer: Node2D
 
-var cursor_highlight: ReferenceRect
+var cursor_highlight: Sprite2D
 var building_highlight: ReferenceRect
-
+var wire_hover_highlight: ColorRect
+var building_hover_highlight: ReferenceRect
+var WIRE_DIRS = [
+	Vector2i(1, 0),
+	Vector2i(1, 1),
+	Vector2i(0, 1),
+	Vector2i(-1, 1),
+	Vector2i(-1, 0),
+	Vector2i(-1, -1),
+	Vector2i(0, -1),
+	Vector2i(1, -1)
+]
+var current_wire_dir_index: int = 0
 var astar = AStarGrid2D.new()
 
 func _ready():
@@ -36,15 +48,10 @@ func _ready():
 	add_child(wire_renderer)
 	wire_renderer.draw.connect(_on_wire_renderer_draw)
 	
-	cursor_highlight = ReferenceRect.new()
-	cursor_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
-	cursor_highlight.border_width = 2.0
-	cursor_highlight.editor_only = false
+	cursor_highlight = Sprite2D.new()
+	cursor_highlight.texture = preload("res://asset/wire.png")
+	cursor_highlight.modulate.a = 0.5
 	cursor_highlight.z_index = 100
-	var bg = ColorRect.new()
-	bg.color = Color(1.0, 1.0, 1.0, 0.2)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	cursor_highlight.add_child(bg)
 	add_child(cursor_highlight)
 	
 	building_highlight = ReferenceRect.new()
@@ -57,6 +64,19 @@ func _ready():
 	b_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	building_highlight.add_child(b_bg)
 	add_child(building_highlight)
+	
+	wire_hover_highlight = ColorRect.new()
+	wire_hover_highlight.color = Color(1.0, 1.0, 1.0, 0.2)
+	wire_hover_highlight.size = Vector2(16, 16)
+	wire_hover_highlight.z_index = 100
+	add_child(wire_hover_highlight)
+	
+	building_hover_highlight = ReferenceRect.new()
+	building_hover_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
+	building_hover_highlight.border_width = 2.0
+	building_hover_highlight.editor_only = false
+	building_hover_highlight.z_index = 100
+	add_child(building_hover_highlight)
 
 	if has_node("UI"):
 		$UI.offset = Vector2.ZERO
@@ -84,6 +104,18 @@ func _add_building_to_grid(building: Node2D, b_type: String):
 		for y in range(16):
 			var c = start_cell + Vector2i(x, y)
 			grid_data[c] = { "type": b_type, "ref": building }
+			
+	# Bulldoze any wires underneath the new building
+	for wx in range(4):
+		for wy in range(4):
+			var tile = _pos_to_wire_tile(top_left + Vector2(wx * 16 + 8, wy * 16 + 8))
+			if wire_grid.has(tile):
+				if wire_grid[tile].item != null and is_instance_valid(wire_grid[tile].item.visual):
+					wire_grid[tile].item.visual.queue_free()
+				wire_grid.erase(tile)
+	
+	if wire_renderer:
+		wire_renderer.queue_redraw()
 
 var _solid_cells = []
 func _update_astar():
@@ -160,6 +192,12 @@ func start_placing_adder():
 		add_child(adder_preview)
 
 func _input(event: InputEvent):
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_E:
+			current_wire_dir_index = (current_wire_dir_index + 1) % 8
+		elif event.keycode == KEY_Q:
+			current_wire_dir_index = (current_wire_dir_index - 1 + 8) % 8
+			
 	if event is InputEventMouseMotion:
 		if current_state == State.DRAWING_WIRE and preview_points.size() > 0:
 			var target_tile = _pos_to_wire_tile(get_global_mouse_position())
@@ -234,11 +272,12 @@ func _input(event: InputEvent):
 					var center = _wire_tile_to_pos(p)
 					var cell = _pos_to_cell(center)
 					
-					var dir = Vector2i(1, 0)
-					if i < preview_points.size() - 1:
-						dir = preview_points[i+1] - p
-					elif i > 0:
-						dir = p - preview_points[i-1] # Keep last direction
+					var dir = WIRE_DIRS[current_wire_dir_index]
+					if preview_points.size() > 1:
+						if i < preview_points.size() - 1:
+							dir = preview_points[i+1] - p
+						elif i > 0:
+							dir = p - preview_points[i-1] # Keep last direction
 						
 					if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner" or grid_data[cell].type == "adder"):
 						continue # Don't place wires inside buildings!
@@ -297,7 +336,7 @@ func _on_wire_renderer_draw():
 		for i in range(preview_points.size()):
 			var center = _wire_tile_to_pos(preview_points[i])
 			var cell = _pos_to_cell(center)
-			if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner"):
+			if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner" or grid_data[cell].type == "adder"):
 				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(1.0, 0.0, 0.0, 0.5))
 			else:
 				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0, 0.5))
@@ -338,12 +377,12 @@ func _process(delta: float):
 					if b.type == "core" or b.type == "miner" or b.type == "adder":
 						var can_receive = true
 						if b.ref.has_method("can_receive"):
-							can_receive = b.ref.can_receive()
+							can_receive = b.ref.can_receive(t)
 							
 						if can_receive:
 							hit_building = true
 							if b.ref.has_method("receive"):
-								b.ref.receive(w.item.value)
+								b.ref.receive(w.item.value, t)
 							if is_instance_valid(w.item.visual): w.item.visual.queue_free()
 							w.item = null
 							moved_any = true
@@ -370,9 +409,14 @@ func _process(delta: float):
 			
 	# Update highlights
 	var mouse_pos = get_global_mouse_position()
-	cursor_highlight.global_position = _snap_to_grid(mouse_pos) - Vector2(8, 8)
-	cursor_highlight.size = Vector2(16, 16)
-	cursor_highlight.visible = current_state != State.PLACING_MINE and current_state != State.PLACING_ADDER
+	var snapped_pos = _snap_to_grid(mouse_pos)
+	var tile_pos = _pos_to_wire_tile(mouse_pos)
+	var cell_pos = _pos_to_cell(mouse_pos)
+	
+	cursor_highlight.visible = false
+	wire_hover_highlight.visible = false
+	building_hover_highlight.visible = false
+	building_highlight.visible = false
 	
 	if current_state == State.PLACING_MINE or current_state == State.PLACING_ADDER:
 		building_highlight.global_position = _snap_building(mouse_pos) - Vector2(32, 32)
@@ -383,7 +427,21 @@ func _process(delta: float):
 		if adder_preview:
 			adder_preview.global_position = _snap_building(mouse_pos)
 	else:
-		building_highlight.visible = false
+		var hovered_building = null
+		if grid_data.has(cell_pos):
+			hovered_building = grid_data[cell_pos].ref
+			
+		if hovered_building != null:
+			building_hover_highlight.global_position = hovered_building.global_position - Vector2(32, 32)
+			building_hover_highlight.size = Vector2(64, 64)
+			building_hover_highlight.visible = true
+		elif wire_grid.has(tile_pos):
+			wire_hover_highlight.global_position = snapped_pos - Vector2(8, 8)
+			wire_hover_highlight.visible = true
+		else:
+			cursor_highlight.global_position = snapped_pos
+			cursor_highlight.rotation = current_wire_dir_index * PI / 4.0
+			cursor_highlight.visible = true
 
 func _on_tick():
 	# Generate items from Miners into adjacent wires
