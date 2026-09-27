@@ -97,9 +97,9 @@ icon_alignment = 1
 vertical_icon_alignment = 2
 
 [node name="MapBounds" type="ReferenceRect" parent="." unique_id=1859571548]
-offset_left = -1917.0
-offset_top = -1320.0
-offset_right = 1879.0
-offset_bottom = 1130.0
+offset_left = -1882.0
+offset_top = -1300.0
+offset_right = 1869.0
+offset_bottom = 1100.0
 border_color = Color(7.70092e-07, 0.64953566, 0.09225, 1)
 border_width = 2.9
