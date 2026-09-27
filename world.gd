@@ -193,10 +193,25 @@ func start_placing_adder():
 
 func _input(event: InputEvent):
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_E:
-			current_wire_dir_index = (current_wire_dir_index + 1) % 8
-		elif event.keycode == KEY_Q:
-			current_wire_dir_index = (current_wire_dir_index - 1 + 8) % 8
+		if event.keycode == KEY_E or event.keycode == KEY_Q:
+			var mouse_pos = get_global_mouse_position()
+			var tile_pos = _pos_to_wire_tile(mouse_pos)
+			
+			if wire_grid.has(tile_pos):
+				var w_idx = WIRE_DIRS.find(wire_grid[tile_pos].dir)
+				if w_idx != -1:
+					if event.keycode == KEY_E:
+						w_idx = (w_idx + 1) % 8
+					else:
+						w_idx = (w_idx - 1 + 8) % 8
+					wire_grid[tile_pos].dir = WIRE_DIRS[w_idx]
+					current_wire_dir_index = w_idx
+					if wire_renderer: wire_renderer.queue_redraw()
+			else:
+				if event.keycode == KEY_E:
+					current_wire_dir_index = (current_wire_dir_index + 1) % 8
+				elif event.keycode == KEY_Q:
+					current_wire_dir_index = (current_wire_dir_index - 1 + 8) % 8
 			
 	if event is InputEventMouseMotion:
 		if current_state == State.DRAWING_WIRE and preview_points.size() > 0:
