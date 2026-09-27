@@ -219,21 +219,23 @@ func _input(event: InputEvent):
 			var last_tile = preview_points[-1]
 			
 			if last_tile != target_tile:
-				var dx = target_tile.x - last_tile.x
-				var dy = target_tile.y - last_tile.y
-				var current = last_tile
-				var steps = 0
-				while current != target_tile and steps < 50:
-					steps += 1
-					if abs(target_tile.x - current.x) > 0 and abs(target_tile.y - current.y) > 0:
-						current.x += sign(target_tile.x - current.x)
-						current.y += sign(target_tile.y - current.y)
-					elif abs(target_tile.x - current.x) > 0:
-						current.x += sign(target_tile.x - current.x)
-					else:
-						current.y += sign(target_tile.y - current.y)
-					if not preview_points.has(current):
-						preview_points.append(current)
+				var idx = preview_points.find(target_tile)
+				if idx != -1:
+					preview_points.resize(idx + 1)
+				else:
+					var current = last_tile
+					var steps = 0
+					while current != target_tile and steps < 50:
+						steps += 1
+						if abs(target_tile.x - current.x) > 0 and abs(target_tile.y - current.y) > 0:
+							current.x += sign(target_tile.x - current.x)
+							current.y += sign(target_tile.y - current.y)
+						elif abs(target_tile.x - current.x) > 0:
+							current.x += sign(target_tile.x - current.x)
+						else:
+							current.y += sign(target_tile.y - current.y)
+						if not preview_points.has(current):
+							preview_points.append(current)
 				wire_renderer.queue_redraw()
 
 	if event is InputEventMouseButton:
