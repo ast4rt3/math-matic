@@ -25,6 +25,12 @@ var adder_preview: Sprite2D = null
 var preview_points: Array[Vector2i] = []
 var wire_renderer: Node2D
 
+var wire_texture = preload("res://asset/wiring/tubeH.png")
+var tube90_texture = preload("res://asset/wiring/tube90.png")
+var tube90flip_texture = preload("res://asset/wiring/tube90flip.png")
+var current_wire_frame: int = 0
+var wire_frame_timer: float = 0.0
+
 var cursor_highlight: Sprite2D
 var building_highlight: ReferenceRect
 var wire_hover_highlight: ColorRect
@@ -416,7 +422,50 @@ func _on_wire_renderer_draw():
 			wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
 			wire_renderer.draw_line(center, center + Vector2(d) * 8.0, Color(1, 1, 1), 2.0)
 		else:
-			wire_renderer.draw_line(center - Vector2(d) * 8.0, center + Vector2(d) * 8.0, Color(0.25, 0.25, 0.25), 14.0)
+			var in_dir = d
+			# Autodetect input direction for 90 degree bends
+			for test_dir in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
+				var neighbor = t - test_dir
+				if wire_grid.has(neighbor) and wire_grid[neighbor].dir == test_dir:
+					in_dir = test_dir
+					break
+			
+			var is_orthogonal = (d.x == 0 or d.y == 0)
+			var in_orthogonal = (in_dir.x == 0 or in_dir.y == 0)
+			
+			if is_orthogonal and in_orthogonal and in_dir != d:
+				# 90 degree turn explicit lookup
+				var angle = 0.0
+				var tex = tube90_texture
+				
+				# Assuming tube90.png flows Top to Left (-Y to -X)
+				# and tube90flip.png flows Top to Right (-Y to +X)
+				if in_dir == Vector2i(1,0) and d == Vector2i(0,1): # Left to Down (Left-Turn)
+					angle = -PI/2.0; tex = tube90_texture
+				elif in_dir == Vector2i(1,0) and d == Vector2i(0,-1): # Left to Up (Right-Turn)
+					angle = -PI/2.0; tex = tube90flip_texture
+				elif in_dir == Vector2i(-1,0) and d == Vector2i(0,1): # Right to Down (Right-Turn)
+					angle = PI/2.0; tex = tube90flip_texture
+				elif in_dir == Vector2i(-1,0) and d == Vector2i(0,-1): # Right to Up (Left-Turn)
+					angle = PI/2.0; tex = tube90_texture
+				elif in_dir == Vector2i(0,1) and d == Vector2i(1,0): # Top to Right (Right-Turn)
+					angle = 0.0; tex = tube90flip_texture
+				elif in_dir == Vector2i(0,1) and d == Vector2i(-1,0): # Top to Left (Left-Turn)
+					angle = 0.0; tex = tube90_texture
+				elif in_dir == Vector2i(0,-1) and d == Vector2i(1,0): # Bottom to Right (Left-Turn)
+					angle = PI; tex = tube90_texture
+				elif in_dir == Vector2i(0,-1) and d == Vector2i(-1,0): # Bottom to Left (Right-Turn)
+					angle = PI; tex = tube90flip_texture
+					
+				var base_offset = 0.0 
+				wire_renderer.draw_set_transform(center, angle + base_offset, Vector2.ONE)
+				wire_renderer.draw_texture_rect(tex, Rect2(-8, -8, 16, 16), false)
+			else:
+				var scale_x = 1.41421356 if Vector2(d).length() > 1.1 else 1.0
+				wire_renderer.draw_set_transform(center, Vector2(d).angle(), Vector2(scale_x, 1.0))
+				wire_renderer.draw_texture_rect(wire_texture, Rect2(-8, -8, 16, 16), false)
+				
+			wire_renderer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 		
 	# Draw preview
 	if preview_points.size() > 0:
@@ -442,7 +491,45 @@ func _on_wire_renderer_draw():
 				wire_renderer.draw_line(center, center + Vector2(dir) * 8.0, Color(1, 1, 1, 0.5), 2.0)
 			else:
 				var c = Color(1.0, 0.0, 0.0, 0.5) if is_blocked else Color(0.25, 0.25, 0.25, 0.6)
-				wire_renderer.draw_line(center - Vector2(dir) * 8.0, center + Vector2(dir) * 8.0, c, 14.0)
+				
+				var in_dir = dir
+				if i > 0:
+					in_dir = p - preview_points[i-1]
+					
+				var is_orthogonal = (dir.x == 0 or dir.y == 0)
+				var in_orthogonal = (in_dir.x == 0 or in_dir.y == 0)
+				
+				if is_orthogonal and in_orthogonal and in_dir != dir:
+					# 90 degree turn explicit lookup
+					var angle = 0.0
+					var tex = tube90_texture
+					
+					if in_dir == Vector2i(1,0) and dir == Vector2i(0,1): # Left to Down (Left-Turn)
+						angle = -PI/2.0; tex = tube90_texture
+					elif in_dir == Vector2i(1,0) and dir == Vector2i(0,-1): # Left to Up (Right-Turn)
+						angle = -PI/2.0; tex = tube90flip_texture
+					elif in_dir == Vector2i(-1,0) and dir == Vector2i(0,1): # Right to Down (Right-Turn)
+						angle = PI/2.0; tex = tube90flip_texture
+					elif in_dir == Vector2i(-1,0) and dir == Vector2i(0,-1): # Right to Up (Left-Turn)
+						angle = PI/2.0; tex = tube90_texture
+					elif in_dir == Vector2i(0,1) and dir == Vector2i(1,0): # Top to Right (Right-Turn)
+						angle = 0.0; tex = tube90flip_texture
+					elif in_dir == Vector2i(0,1) and dir == Vector2i(-1,0): # Top to Left (Left-Turn)
+						angle = 0.0; tex = tube90_texture
+					elif in_dir == Vector2i(0,-1) and dir == Vector2i(1,0): # Bottom to Right (Left-Turn)
+						angle = PI; tex = tube90_texture
+					elif in_dir == Vector2i(0,-1) and dir == Vector2i(-1,0): # Bottom to Left (Right-Turn)
+						angle = PI; tex = tube90flip_texture
+						
+					var base_offset = 0.0 
+					wire_renderer.draw_set_transform(center, angle + base_offset, Vector2.ONE)
+					wire_renderer.draw_texture_rect(tex, Rect2(-8, -8, 16, 16), false, c)
+				else:
+					var scale_x = 1.41421356 if Vector2(dir).length() > 1.1 else 1.0
+					wire_renderer.draw_set_transform(center, Vector2(dir).angle(), Vector2(scale_x, 1.0))
+					wire_renderer.draw_texture_rect(wire_texture, Rect2(-8, -8, 16, 16), false, c)
+					
+				wire_renderer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 func _process(delta: float):
 	if camera:
