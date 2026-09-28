@@ -10,16 +10,20 @@ const WireSystemScript = preload("res://WireSystem.gd")
 var grid_system
 var wire_system
 
-enum State { IDLE, PLACING_MINE, PLACING_ADDER, DRAWING_WIRE, DELETING }
+enum State { IDLE, PLACING_MINE, PLACING_ADDER, PLACING_TURRET, DRAWING_WIRE, DELETING }
 var current_state: State = State.IDLE
 
+var global_game_speed: float = 1.0 # 0.0 = pause, 2.0 = fast forward, etc.
+var base_tick_rate: float = 0.1 # Global time unit (10 ticks per second)
 var tick_accumulator: float = 0.0
-var tick_rate: float = 0.4 
+var current_tick: int = 0
 
 var mine_scene = preload("res://buildings/Mine.tscn")
 var mine_preview: Sprite2D = null
 var adder_scene = preload("res://buildings/Adder.tscn")
 var adder_preview: Sprite2D = null
+var turret_scene = preload("res://buildings/Turret.tscn")
+var turret_preview: Node2D = null
 
 var cursor_highlight: Sprite2D
 var building_highlight: ReferenceRect
@@ -94,6 +98,12 @@ func _ready():
 		$UI/MineButton.pressed.connect(start_placing_mine)
 	if has_node("UI/AdderButton"):
 		$UI/AdderButton.pressed.connect(start_placing_adder)
+		
+	# Spawn a dummy enemy
+	var enemy_scene = preload("res://buildings/EnemyDummy.tscn")
+	var enemy = enemy_scene.instantiate()
+	enemy.global_position = Vector2(0, -300)
+	add_child(enemy)
 	
 	grid_system.grid_data.clear()
 	grid_system.add_building(core, "core")
@@ -115,6 +125,9 @@ func start_drawing_wire():
 	if adder_preview:
 		adder_preview.queue_free()
 		adder_preview = null
+	if turret_preview:
+		turret_preview.queue_free()
+		turret_preview = null
 
 func start_placing_mine():
 	if current_state == State.PLACING_MINE:
@@ -132,6 +145,9 @@ func start_placing_mine():
 	if adder_preview:
 		adder_preview.queue_free()
 		adder_preview = null
+	if turret_preview:
+		turret_preview.queue_free()
+		turret_preview = null
 		
 	wire_system.preview_points.clear()
 	wire_system.queue_redraw()
@@ -152,6 +168,31 @@ func start_placing_adder():
 	if mine_preview:
 		mine_preview.queue_free()
 		mine_preview = null
+	if turret_preview:
+		turret_preview.queue_free()
+		turret_preview = null
+		
+	wire_system.preview_points.clear()
+	wire_system.queue_redraw()
+
+func start_placing_turret():
+	if current_state == State.PLACING_TURRET:
+		current_state = State.IDLE
+		if turret_preview:
+			turret_preview.queue_free()
+			turret_preview = null
+		return
+	current_state = State.PLACING_TURRET
+	if turret_preview == null:
+		turret_preview = turret_scene.instantiate()
+		turret_preview.modulate.a = 0.5
+		add_child(turret_preview)
+	if mine_preview:
+		mine_preview.queue_free()
+		mine_preview = null
+	if adder_preview:
+		adder_preview.queue_free()
+		adder_preview = null
 		
 	wire_system.preview_points.clear()
 	wire_system.queue_redraw()
@@ -168,7 +209,13 @@ func _input(event: InputEvent):
 			target_zoom.y = max(target_zoom.y, 0.2)
 			
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_F3:
+		if event.keycode == KEY_1:
+			start_placing_mine()
+		elif event.keycode == KEY_2:
+			start_placing_adder()
+		elif event.keycode == KEY_3:
+			start_placing_turret()
+		elif event.keycode == KEY_F3:
 			wire_system.debug_mode = not wire_system.debug_mode
 			wire_system.queue_redraw()
 		elif event.keycode == KEY_E or event.keycode == KEY_Q:
@@ -234,6 +281,9 @@ func _input(event: InputEvent):
 			if current_state == State.PLACING_ADDER:
 				start_placing_adder()
 				return
+			if current_state == State.PLACING_TURRET:
+				start_placing_turret()
+				return
 			if current_state == State.DRAWING_WIRE:
 				start_drawing_wire()
 				return
@@ -268,6 +318,14 @@ func _input(event: InputEvent):
 					add_child(adder)
 					grid_system.add_building(adder, "adder")
 				return
+			if current_state == State.PLACING_TURRET:
+				var snapped_pos = grid_system.snap_building(world_pos)
+				if grid_system.can_place_building(snapped_pos, "turret"):
+					var turret = turret_scene.instantiate()
+					turret.position = snapped_pos
+					add_child(turret)
+					grid_system.add_building(turret, "turret")
+				return
 			if current_state == State.IDLE:
 				start_drawing_wire()
 			if current_state == State.DRAWING_WIRE:
@@ -289,7 +347,7 @@ func _input(event: InputEvent):
 						elif i > 0:
 							dir = p - wire_system.preview_points[i-1] 
 						
-					if grid_system.grid_data.has(cell) and (grid_system.grid_data[cell].type == "core" or grid_system.grid_data[cell].type == "miner" or grid_system.grid_data[cell].type == "adder"):
+					if grid_system.grid_data.has(cell) and grid_system.grid_data[cell].get("is_building", true):
 						continue 
 						
 					if not wire_system.wire_grid.has(p):
@@ -328,12 +386,13 @@ func _process(delta: float):
 		target_zoom.y = clamp(target_zoom.y, min_zoom, 3.0)
 		camera.zoom = camera.zoom.lerp(target_zoom, 10.0 * delta)
 
-	tick_accumulator += delta
-	while tick_accumulator >= tick_rate:
-		tick_accumulator -= tick_rate
-		wire_system.tick_items(get_children())
+	tick_accumulator += delta * global_game_speed
+	while tick_accumulator >= base_tick_rate:
+		tick_accumulator -= base_tick_rate
+		current_tick += 1
+		wire_system.tick_items(get_children(), current_tick)
 
-	wire_system.process_items(delta)
+	wire_system.process_items(delta, global_game_speed)
 			
 	if has_node("UI/MineButton"):
 		$UI/MineButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_MINE else Color(1, 1, 1)
@@ -350,8 +409,11 @@ func _process(delta: float):
 	building_hover_highlight.visible = false
 	building_highlight.visible = false
 	
-	if current_state == State.PLACING_MINE or current_state == State.PLACING_ADDER:
-		var size = 32 if current_state == State.PLACING_MINE else 64
+	if current_state == State.PLACING_MINE or current_state == State.PLACING_ADDER or current_state == State.PLACING_TURRET:
+		var b_type = "miner"
+		if current_state == State.PLACING_ADDER: b_type = "adder"
+		elif current_state == State.PLACING_TURRET: b_type = "turret"
+		var size = grid_system.get_building_size(b_type)
 		building_highlight.global_position = grid_system.snap_building(mouse_pos) - Vector2(size/2, size/2)
 		building_highlight.size = Vector2(size, size)
 		building_highlight.visible = true
@@ -359,14 +421,16 @@ func _process(delta: float):
 			mine_preview.global_position = grid_system.snap_building(mouse_pos)
 		if adder_preview:
 			adder_preview.global_position = grid_system.snap_building(mouse_pos)
+		if turret_preview:
+			turret_preview.global_position = grid_system.snap_building(mouse_pos)
 	else:
 		var hovered_building = null
 		if grid_system.grid_data.has(cell_pos):
 			hovered_building = grid_system.grid_data[cell_pos].ref
 			
 		if hovered_building != null:
-			var is_miner = (grid_system.grid_data[cell_pos].type == "miner")
-			var size = 32 if is_miner else 64
+			var b_type = grid_system.grid_data[cell_pos].type
+			var size = grid_system.get_building_size(b_type)
 			building_hover_highlight.global_position = hovered_building.global_position - Vector2(size/2, size/2)
 			building_hover_highlight.size = Vector2(size, size)
 			building_hover_highlight.visible = true

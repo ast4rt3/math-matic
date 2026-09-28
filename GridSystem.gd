@@ -34,14 +34,15 @@ func update_astar():
 			_solid_cells.append(cell)
 
 func add_building(building: Node2D, b_type: String):
-	var size = 32 if b_type == "miner" else 64
+	var size = get_building_size(b_type)
 	var top_left = building.global_position - Vector2(size/2, size/2)
 	var start_cell = pos_to_cell(top_left)
 	var cells = size / 4
 	for x in range(cells):
 		for y in range(cells):
 			var c = start_cell + Vector2i(x, y)
-			grid_data[c] = { "type": b_type, "ref": building }
+			var is_b = true
+			grid_data[c] = { "type": b_type, "ref": building, "is_building": is_b }
 			
 	if wire_system:
 		var wire_tiles = size / 16
@@ -66,8 +67,13 @@ func remove_building(building: Node2D):
 	building.queue_free()
 	update_astar()
 
+func get_building_size(b_type: String) -> int:
+	if b_type == "miner": return 32
+	if b_type == "adder" or b_type == "turret" or b_type == "core": return 64
+	return 32
+
 func can_place_building(pos: Vector2, b_type: String) -> bool:
-	var size = 32 if b_type == "miner" else 64
+	var size = get_building_size(b_type)
 	var top_left = pos - Vector2(size/2, size/2)
 	
 	if top_left.x < limit_left or top_left.y < limit_top or (top_left.x + size) > limit_right or (top_left.y + size) > limit_bottom:

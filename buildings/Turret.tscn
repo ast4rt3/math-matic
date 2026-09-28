@@ -1,0 +1,27 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://buildings/turret.gd" id="1_scr"]
+[ext_resource type="Texture2D" path="res://buildings/turret/turretBody.png" id="2_tex"]
+[ext_resource type="Texture2D" path="res://buildings/turret/turretHead.png" id="3_tex"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_turret"]
+size = Vector2(64, 64)
+
+[node name="Turret" type="Node2D"]
+script = ExtResource("1_scr")
+
+[node name="Body" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+
+[node name="Head" type="Sprite2D" parent="."]
+position = Vector2(0, 5)
+texture = ExtResource("3_tex")
+offset = Vector2(0, -23)
+
+[node name="Muzzle" type="Marker2D" parent="Head"]
+position = Vector2(-20, -100)
+
+[node name="Clickarea" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Clickarea"]
+shape = SubResource("RectangleShape2D_turret")

@@ -1,0 +1,22 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://buildings/enemy_dummy.gd" id="1_scr"]
+[ext_resource type="Texture2D" path="res://icon.svg" id="2_tex"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_enemy"]
+size = Vector2(128, 128)
+
+[node name="EnemyDummy" type="Node2D"]
+script = ExtResource("1_scr")
+z_index = 10
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+texture = ExtResource("2_tex")
+modulate = Color(1, 0, 0, 1)
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_enemy")
+
+

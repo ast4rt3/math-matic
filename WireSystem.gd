@@ -84,7 +84,7 @@ func _draw():
 				in_dir = p - preview_points[i-1]
 				
 			var is_blocked = false
-			if grid_system.grid_data.has(cell) and (grid_system.grid_data[cell].type == "core" or grid_system.grid_data[cell].type == "miner" or grid_system.grid_data[cell].type == "adder"):
+			if grid_system.grid_data.has(cell) and grid_system.grid_data[cell].get("is_building", true):
 				is_blocked = true
 				
 			if debug_mode:
@@ -103,12 +103,20 @@ func _draw():
 				draw_polyline(pts, c_outline, outline_width, true)
 				draw_polyline(pts, c_wire, wire_width, true)
 
-func tick_items(nodes: Array[Node]):
-	# Pass 1: Generate items from Miners into adjacent wires
+func tick_items(nodes: Array[Node], current_tick: int):
+	# Pass 1: Generate items from Miners or Adders into adjacent wires
 	for child in nodes:
 		if child.has_node("OutputPort") and child.name != "Core":
-			if child.has_method("can_output") and not child.can_output(): continue
 			var is_miner = not child.has_method("can_receive")
+			
+			var ticks_per_gen = child.get("ticks_per_generation")
+			if ticks_per_gen == null:
+				ticks_per_gen = 5 if is_miner else 2 # Default: Miner=5 ticks (0.5s), Adder=2 ticks (0.2s)
+				
+			if current_tick % ticks_per_gen != 0:
+				continue
+			
+			if child.has_method("can_output") and not child.can_output(): continue
 			var size = 32 if is_miner else 64
 			var top_left = child.global_position - Vector2(size/2, size/2)
 			var wire_tiles = size / 16
@@ -170,8 +178,8 @@ func tick_items(nodes: Array[Node]):
 						miner_round_robin[child] = (idx + 1) % valid_outputs.size()
 						break
 
-func process_items(delta: float):
-	var speed = 64.0
+func process_items(delta: float, game_speed: float):
+	var speed = 300.0 * game_speed
 	
 	for t in wire_grid:
 		var w = wire_grid[t]
@@ -196,7 +204,7 @@ func process_items(delta: float):
 				
 				if grid_system.grid_data.has(cell_4x4):
 					var b = grid_system.grid_data[cell_4x4]
-					if b.type == "core" or b.type == "miner" or b.type == "adder":
+					if b.type == "core" or b.type == "miner" or b.type == "adder" or b.type == "turret":
 						var can_receive = true
 						if b.ref.has_method("can_receive"):
 							can_receive = b.ref.can_receive(t)
