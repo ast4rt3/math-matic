@@ -28,6 +28,9 @@ var wire_renderer: Node2D
 var wire_texture = preload("res://asset/wiring/tubeH.png")
 var tube90_texture = preload("res://asset/wiring/tube90.png")
 var tube90flip_texture = preload("res://asset/wiring/tube90flip.png")
+var tube45_texture = preload("res://asset/wiring/tube45.png")
+var tube45corner_texture = preload("res://asset/wiring/tube45corner.png")
+var tube45corner_flip_texture = preload("res://asset/wiring/tube45corner_flip.png")
 var current_wire_frame: int = 0
 var wire_frame_timer: float = 0.0
 
@@ -413,59 +416,43 @@ func _delete_building(building: Node2D):
 	building.queue_free()
 	_update_astar()
 
+func _get_bezier_points(p0: Vector2, p1: Vector2, p2: Vector2, segments: int = 8) -> PackedVector2Array:
+	var points = PackedVector2Array()
+	for i in range(segments + 1):
+		var t = float(i) / segments
+		var q0 = p0.lerp(p1, t)
+		var q1 = p1.lerp(p2, t)
+		points.append(q0.lerp(q1, t))
+	return points
+
 func _on_wire_renderer_draw():
+	var wire_color = Color(0.3, 0.8, 1.0)
+	var outline_color = Color(0.1, 0.1, 0.15)
+	var wire_width = 4.0
+	var outline_width = 8.0
+	
 	# Draw placed wires
 	for t in wire_grid:
 		var center = _wire_tile_to_pos(t)
 		var d = wire_grid[t].dir
+		
+		var in_dir = d
+		for test_dir in WIRE_DIRS:
+			var neighbor = t - test_dir
+			if wire_grid.has(neighbor) and wire_grid[neighbor].dir == test_dir:
+				in_dir = test_dir
+				break
+				
 		if debug_mode:
 			wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
 			wire_renderer.draw_line(center, center + Vector2(d) * 8.0, Color(1, 1, 1), 2.0)
 		else:
-			var in_dir = d
-			# Autodetect input direction for 90 degree bends
-			for test_dir in [Vector2i(1,0), Vector2i(-1,0), Vector2i(0,1), Vector2i(0,-1)]:
-				var neighbor = t - test_dir
-				if wire_grid.has(neighbor) and wire_grid[neighbor].dir == test_dir:
-					in_dir = test_dir
-					break
-			
-			var is_orthogonal = (d.x == 0 or d.y == 0)
-			var in_orthogonal = (in_dir.x == 0 or in_dir.y == 0)
-			
-			if is_orthogonal and in_orthogonal and in_dir != d:
-				# 90 degree turn explicit lookup
-				var angle = 0.0
-				var tex = tube90_texture
-				
-				# Assuming tube90.png flows Top to Left (-Y to -X)
-				# and tube90flip.png flows Top to Right (-Y to +X)
-				if in_dir == Vector2i(1,0) and d == Vector2i(0,1): # Left to Down (Left-Turn)
-					angle = -PI/2.0; tex = tube90_texture
-				elif in_dir == Vector2i(1,0) and d == Vector2i(0,-1): # Left to Up (Right-Turn)
-					angle = -PI/2.0; tex = tube90flip_texture
-				elif in_dir == Vector2i(-1,0) and d == Vector2i(0,1): # Right to Down (Right-Turn)
-					angle = PI/2.0; tex = tube90flip_texture
-				elif in_dir == Vector2i(-1,0) and d == Vector2i(0,-1): # Right to Up (Left-Turn)
-					angle = PI/2.0; tex = tube90_texture
-				elif in_dir == Vector2i(0,1) and d == Vector2i(1,0): # Top to Right (Right-Turn)
-					angle = 0.0; tex = tube90flip_texture
-				elif in_dir == Vector2i(0,1) and d == Vector2i(-1,0): # Top to Left (Left-Turn)
-					angle = 0.0; tex = tube90_texture
-				elif in_dir == Vector2i(0,-1) and d == Vector2i(1,0): # Bottom to Right (Left-Turn)
-					angle = PI; tex = tube90_texture
-				elif in_dir == Vector2i(0,-1) and d == Vector2i(-1,0): # Bottom to Left (Right-Turn)
-					angle = PI; tex = tube90flip_texture
-					
-				var base_offset = 0.0 
-				wire_renderer.draw_set_transform(center, angle + base_offset, Vector2.ONE)
-				wire_renderer.draw_texture_rect(tex, Rect2(-8, -8, 16, 16), false)
-			else:
-				var scale_x = 1.41421356 if Vector2(d).length() > 1.1 else 1.0
-				wire_renderer.draw_set_transform(center, Vector2(d).angle(), Vector2(scale_x, 1.0))
-				wire_renderer.draw_texture_rect(wire_texture, Rect2(-8, -8, 16, 16), false)
-				
-			wire_renderer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+			var p0 = center - Vector2(in_dir) * 8.0
+			var p1 = center
+			var p2 = center + Vector2(d) * 8.0
+			var pts = _get_bezier_points(p0, p1, p2, 8)
+			wire_renderer.draw_polyline(pts, outline_color, outline_width, true)
+			wire_renderer.draw_polyline(pts, wire_color, wire_width, true)
 		
 	# Draw preview
 	if preview_points.size() > 0:
@@ -474,13 +461,17 @@ func _on_wire_renderer_draw():
 			var center = _wire_tile_to_pos(p)
 			var cell = _pos_to_cell(center)
 			
-			var dir = WIRE_DIRS[current_wire_dir_index]
+			var out_dir = WIRE_DIRS[current_wire_dir_index]
 			if preview_points.size() > 1:
 				if i < preview_points.size() - 1:
-					dir = preview_points[i+1] - p
+					out_dir = preview_points[i+1] - p
 				elif i > 0:
-					dir = p - preview_points[i-1]
+					out_dir = p - preview_points[i-1]
 					
+			var in_dir = out_dir
+			if i > 0:
+				in_dir = p - preview_points[i-1]
+				
 			var is_blocked = false
 			if grid_data.has(cell) and (grid_data[cell].type == "core" or grid_data[cell].type == "miner" or grid_data[cell].type == "adder"):
 				is_blocked = true
@@ -488,48 +479,18 @@ func _on_wire_renderer_draw():
 			if debug_mode:
 				var c = Color(1.0, 0.0, 0.0, 0.5) if is_blocked else Color(0.2, 0.9, 1.0, 0.5)
 				wire_renderer.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), c)
-				wire_renderer.draw_line(center, center + Vector2(dir) * 8.0, Color(1, 1, 1, 0.5), 2.0)
+				wire_renderer.draw_line(center, center + Vector2(out_dir) * 8.0, Color(1, 1, 1, 0.5), 2.0)
 			else:
-				var c = Color(1.0, 0.0, 0.0, 0.5) if is_blocked else Color(0.25, 0.25, 0.25, 0.6)
+				var c_wire = Color(1.0, 0.2, 0.2, 0.7) if is_blocked else Color(0.3, 0.8, 1.0, 0.7)
+				var c_outline = Color(0.1, 0.0, 0.0, 0.5) if is_blocked else Color(0.1, 0.1, 0.15, 0.7)
 				
-				var in_dir = dir
-				if i > 0:
-					in_dir = p - preview_points[i-1]
-					
-				var is_orthogonal = (dir.x == 0 or dir.y == 0)
-				var in_orthogonal = (in_dir.x == 0 or in_dir.y == 0)
+				var p0 = center - Vector2(in_dir) * 8.0
+				var p1 = center
+				var p2 = center + Vector2(out_dir) * 8.0
+				var pts = _get_bezier_points(p0, p1, p2, 8)
 				
-				if is_orthogonal and in_orthogonal and in_dir != dir:
-					# 90 degree turn explicit lookup
-					var angle = 0.0
-					var tex = tube90_texture
-					
-					if in_dir == Vector2i(1,0) and dir == Vector2i(0,1): # Left to Down (Left-Turn)
-						angle = -PI/2.0; tex = tube90_texture
-					elif in_dir == Vector2i(1,0) and dir == Vector2i(0,-1): # Left to Up (Right-Turn)
-						angle = -PI/2.0; tex = tube90flip_texture
-					elif in_dir == Vector2i(-1,0) and dir == Vector2i(0,1): # Right to Down (Right-Turn)
-						angle = PI/2.0; tex = tube90flip_texture
-					elif in_dir == Vector2i(-1,0) and dir == Vector2i(0,-1): # Right to Up (Left-Turn)
-						angle = PI/2.0; tex = tube90_texture
-					elif in_dir == Vector2i(0,1) and dir == Vector2i(1,0): # Top to Right (Right-Turn)
-						angle = 0.0; tex = tube90flip_texture
-					elif in_dir == Vector2i(0,1) and dir == Vector2i(-1,0): # Top to Left (Left-Turn)
-						angle = 0.0; tex = tube90_texture
-					elif in_dir == Vector2i(0,-1) and dir == Vector2i(1,0): # Bottom to Right (Left-Turn)
-						angle = PI; tex = tube90_texture
-					elif in_dir == Vector2i(0,-1) and dir == Vector2i(-1,0): # Bottom to Left (Right-Turn)
-						angle = PI; tex = tube90flip_texture
-						
-					var base_offset = 0.0 
-					wire_renderer.draw_set_transform(center, angle + base_offset, Vector2.ONE)
-					wire_renderer.draw_texture_rect(tex, Rect2(-8, -8, 16, 16), false, c)
-				else:
-					var scale_x = 1.41421356 if Vector2(dir).length() > 1.1 else 1.0
-					wire_renderer.draw_set_transform(center, Vector2(dir).angle(), Vector2(scale_x, 1.0))
-					wire_renderer.draw_texture_rect(wire_texture, Rect2(-8, -8, 16, 16), false, c)
-					
-				wire_renderer.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+				wire_renderer.draw_polyline(pts, c_outline, outline_width, true)
+				wire_renderer.draw_polyline(pts, c_wire, wire_width, true)
 
 func _process(delta: float):
 	if camera:
