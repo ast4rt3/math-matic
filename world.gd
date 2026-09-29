@@ -34,6 +34,9 @@ var target_zoom: Vector2 = Vector2(1, 1)
 var cam_pan_speed: float = 600.0
 var original_offsets = {}
 var tray_collapsed = false
+var categories = ["Miner", "Math", "Attack", "Wires"]
+var current_category_idx = 0
+var wire_button: Button = null
 
 
 func _ready():
@@ -99,6 +102,29 @@ func _ready():
 	building_hover_highlight.z_index = 100
 	add_child(building_hover_highlight)
 
+
+	if has_node("UI/CategoryTab"):
+		$UI/CategoryTab.gui_input.connect(_on_category_tab_input)
+		
+	wire_button = Button.new()
+	wire_button.text = "Wire"
+	wire_button.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	wire_button.expand_icon = true
+	if has_node("UI/MineButton"):
+		var ref = get_node("UI/MineButton")
+		wire_button.position = ref.position
+		wire_button.size = ref.size
+		wire_button.anchors_preset = ref.anchors_preset
+		wire_button.anchor_top = ref.anchor_top
+		wire_button.anchor_bottom = ref.anchor_bottom
+		wire_button.icon = preload("res://asset/wire.png")
+		wire_button.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		wire_button.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	if has_node("UI"):
+		$UI.add_child(wire_button)
+	wire_button.pressed.connect(start_drawing_wire)
+	
+	update_category_ui()
 	if has_node("UI"):
 		$UI.offset = Vector2.ZERO
 	if has_node("UI/MineButton"):
@@ -112,6 +138,7 @@ func _ready():
 		$UI/DropdownBtn.pivot_offset = $UI/DropdownBtn.size / 2.0
 		
 	var ui_nodes = ["UI/BuildingTray", "UI/CategoryTab", "UI/DropdownBtn", "UI/Slot1", "UI/Slot2", "UI/Slot3", "UI/MineButton", "UI/AdderButton", "UI/TurretButton"]
+	if wire_button: ui_nodes.append(wire_button.get_path())
 	for node_path in ui_nodes:
 		if has_node(node_path):
 			var n = get_node(node_path)
@@ -313,8 +340,14 @@ func _unhandled_input(event: InputEvent):
 				return
 				
 			if wire_system.wire_grid.has(tile_pos):
-				if wire_system.wire_grid[tile_pos].item != null and is_instance_valid(wire_system.wire_grid[tile_pos].item.visual):
-					wire_system.wire_grid[tile_pos].item.visual.queue_free()
+				var wg = wire_system.wire_grid[tile_pos]
+				if wg.get("type", "wire") == "junction":
+					for itm in wg.get("items", []):
+						if is_instance_valid(itm.visual):
+							itm.visual.queue_free()
+				else:
+					if wg.get("item") != null and is_instance_valid(wg.item.visual):
+						wg.item.visual.queue_free()
 				wire_system.wire_grid.erase(tile_pos)
 				wire_system.queue_redraw()
 				return
@@ -370,9 +403,18 @@ func _unhandled_input(event: InputEvent):
 						continue 
 						
 					if not wire_system.wire_grid.has(p):
-						wire_system.wire_grid[p] = { "dir": dir, "item": null }
+						wire_system.wire_grid[p] = { "type": "wire", "dir": dir, "item": null }
 					else:
-						wire_system.wire_grid[p].dir = dir
+						var existing = wire_system.wire_grid[p]
+						if existing.get("type", "wire") == "wire" and existing.dir != dir:
+							existing["type"] = "junction"
+							existing["dirs"] = [existing.dir, dir]
+							existing["items"] = [existing.item] if existing.get("item") != null else []
+							existing["item"] = null
+							existing["rr_idx"] = 0
+						elif existing.get("type", "wire") == "junction":
+							if not dir in existing.dirs:
+								existing.dirs.append(dir)
 						
 				wire_system.preview_points.clear()
 				wire_system.queue_redraw()
@@ -484,3 +526,29 @@ func _on_dropdown_pressed():
 		tween.tween_property(n, "offset_top", original_offsets[node_path].top + shift, 0.2).set_trans(Tween.TRANS_SINE)
 		tween.tween_property(n, "offset_bottom", original_offsets[node_path].bottom + shift, 0.2).set_trans(Tween.TRANS_SINE)
 	tween.tween_property($UI/DropdownBtn, "rotation_degrees", 180.0 if tray_collapsed else 0.0, 0.2)
+
+
+func _on_category_tab_input(event: InputEvent):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		current_category_idx = (current_category_idx + 1) % categories.size()
+		update_category_ui()
+
+func update_category_ui():
+	var cat = categories[current_category_idx]
+	if has_node("UI/CategoryTab/CategoryLabel"):
+		$UI/CategoryTab/CategoryLabel.text = cat
+		
+	if has_node("UI/MineButton"): $UI/MineButton.visible = (cat == "Miner")
+	if has_node("UI/AdderButton"): 
+		$UI/AdderButton.visible = (cat == "Math")
+		if cat == "Math":
+			$UI/AdderButton.position = $UI/MineButton.position
+	if has_node("UI/TurretButton"): 
+		$UI/TurretButton.visible = (cat == "Attack")
+		if cat == "Attack":
+			$UI/TurretButton.position = $UI/MineButton.position
+			
+	if wire_button:
+		wire_button.visible = (cat == "Wires")
+		if cat == "Wires":
+			wire_button.position = $UI/MineButton.position
