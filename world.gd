@@ -305,7 +305,7 @@ func _input(event: InputEvent):
 		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 			if current_state == State.PLACING_MINE:
 				var snapped_pos = grid_system.snap_building(world_pos)
-				if grid_system.can_place_building(snapped_pos, "miner"):
+				if grid_system.can_place_building(snapped_pos, "miner") and core.spend(1.0, 10):
 					var mine = mine_scene.instantiate()
 					mine.position = snapped_pos
 					mine.linked_to = null
@@ -314,7 +314,7 @@ func _input(event: InputEvent):
 				return
 			if current_state == State.PLACING_ADDER:
 				var snapped_pos = grid_system.snap_building(world_pos)
-				if grid_system.can_place_building(snapped_pos, "adder"):
+				if grid_system.can_place_building(snapped_pos, "adder") and core.spend(1.0, 20):
 					var adder = adder_scene.instantiate()
 					adder.position = snapped_pos
 					add_child(adder)
@@ -322,7 +322,7 @@ func _input(event: InputEvent):
 				return
 			if current_state == State.PLACING_TURRET:
 				var snapped_pos = grid_system.snap_building(world_pos)
-				if grid_system.can_place_building(snapped_pos, "turret"):
+				if grid_system.can_place_building(snapped_pos, "turret") and core.spend(1.0, 50):
 					var turret = turret_scene.instantiate()
 					turret.position = snapped_pos
 					add_child(turret)
@@ -402,6 +402,9 @@ func _process(delta: float):
 		$UI/AdderButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_ADDER else Color(1, 1, 1)
 	if has_node("UI/TurretButton"):
 		$UI/TurretButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_TURRET else Color(1, 1, 1)
+		
+	if has_node("UI/CurrencyLabel") and is_instance_valid(core):
+		$UI/CurrencyLabel.text = "Currency:\n" + core.get_currency_text()
 		
 	var mouse_pos = get_global_mouse_position()
 	var snapped_pos = wire_system.snap_to_grid(mouse_pos)
