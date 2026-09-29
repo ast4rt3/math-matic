@@ -514,7 +514,8 @@ func _process(delta: float):
 				if w_idx != -1:
 					wire_system.current_wire_dir_index = w_idx
 					
-			cursor_highlight.rotation = wire_system.current_wire_dir_index * PI / 4.0
+			var current_dir_vec = wire_system.WIRE_DIRS[wire_system.current_wire_dir_index]
+			cursor_highlight.rotation = Vector2(current_dir_vec).angle()
 			cursor_highlight.visible = true
 
 
