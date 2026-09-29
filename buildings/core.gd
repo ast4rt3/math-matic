@@ -25,7 +25,8 @@ func spend(value: float, amount: int) -> bool:
 func update_label():
 	var text = ""
 	for val in currency.keys():
-		text += str(val) + "'s: " + str(currency[val]) + "\n"
+		var val_str = str(int(val)) if val == int(val) else str(val)
+		text += val_str + "'s: " + str(currency[val]) + "\n"
 	label.text = text.strip_edges()
 
 func get_currency_text() -> String:
