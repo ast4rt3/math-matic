@@ -60,7 +60,7 @@ func remove_building(building: Node2D):
 	if building.name == "Core": return
 	var cells_to_erase = []
 	for c in grid_data:
-		if (grid_data[c].type == "miner" or grid_data[c].type == "adder") and grid_data[c].ref == building:
+		if (grid_data[c].type in ["miner", "adder", "turret"]) and grid_data[c].ref == building:
 			cells_to_erase.append(c)
 	for c in cells_to_erase:
 		grid_data.erase(c)

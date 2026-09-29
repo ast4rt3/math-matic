@@ -74,15 +74,18 @@ func _ready():
 	building_highlight = ReferenceRect.new()
 	building_highlight.border_color = Color(1.0, 1.0, 1.0, 0.5)
 	building_highlight.border_width = 2.0
+	building_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	building_highlight.editor_only = false
 	building_highlight.z_index = 99
 	var b_bg = ColorRect.new()
+	b_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	b_bg.color = Color(1.0, 1.0, 1.0, 0.1)
 	b_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	building_highlight.add_child(b_bg)
 	add_child(building_highlight)
 	
 	wire_hover_highlight = ColorRect.new()
+	wire_hover_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wire_hover_highlight.color = Color(1.0, 1.0, 1.0, 0.2)
 	wire_hover_highlight.size = Vector2(16, 16)
 	wire_hover_highlight.z_index = 100
@@ -91,6 +94,7 @@ func _ready():
 	building_hover_highlight = ReferenceRect.new()
 	building_hover_highlight.border_color = Color(1.0, 1.0, 1.0, 0.8)
 	building_hover_highlight.border_width = 2.0
+	building_hover_highlight.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	building_hover_highlight.editor_only = false
 	building_hover_highlight.z_index = 100
 	add_child(building_hover_highlight)
@@ -212,7 +216,7 @@ func start_placing_turret():
 	wire_system.preview_points.clear()
 	wire_system.queue_redraw()
 
-func _input(event: InputEvent):
+func _unhandled_input(event: InputEvent):
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			target_zoom *= 1.2
@@ -304,7 +308,7 @@ func _input(event: InputEvent):
 				return
 				
 			var cell_4x4 = grid_system.pos_to_cell(world_pos)
-			if grid_system.grid_data.has(cell_4x4) and (grid_system.grid_data[cell_4x4].type == "miner" or grid_system.grid_data[cell_4x4].type == "adder"):
+			if grid_system.grid_data.has(cell_4x4) and (grid_system.grid_data[cell_4x4].type in ["miner", "adder", "turret"]):
 				grid_system.remove_building(grid_system.grid_data[cell_4x4].ref)
 				return
 				

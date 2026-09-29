@@ -16,8 +16,13 @@ func receive(value: float, source: Vector2i):
 	update_label()
 
 func spend(value: float, amount: int) -> bool:
-	if currency.get(value, 0) >= amount:
+	if currency.has(value) and currency[value] >= amount:
 		currency[value] -= amount
+		update_label()
+		return true
+	var int_val = int(value)
+	if currency.has(int_val) and currency[int_val] >= amount:
+		currency[int_val] -= amount
 		update_label()
 		return true
 	return false

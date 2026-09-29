@@ -74,12 +74,14 @@ offset = Vector2(2000, 0)
 transform = Transform2D(1, 0, 0, 1, 2000, 0)
 
 [node name="ScreenReference" type="ReferenceRect" parent="UI" unique_id=538733033]
+mouse_filter = 2
 offset_right = 1152.0
 offset_bottom = 648.0
 border_color = Color(4.813075e-07, 0.58969957, 0.7504738, 1)
 border_width = 4.7
 
 [node name="BuildingTray" type="TextureRect" parent="UI" unique_id=1883073402]
+mouse_filter = 0
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
@@ -89,6 +91,7 @@ texture = ExtResource("ui_tray")
 expand_mode = 1
 
 [node name="CategoryTab" type="TextureRect" parent="UI" unique_id=1581876094]
+mouse_filter = 0
 anchors_preset = 2
 anchor_top = 1.0
 anchor_bottom = 1.0
@@ -112,12 +115,14 @@ horizontal_alignment = 1
 vertical_alignment = 1
 
 [node name="DropdownBtn" type="TextureButton" parent="UI" unique_id=401103519]
-anchors_preset = 2
+anchors_preset = 7
+anchor_left = 0.5
 anchor_top = 1.0
+anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = 550.0
+offset_left = -24.0
 offset_top = -152.0
-offset_right = 598.0
+offset_right = 24.0
 offset_bottom = -128.0
 texture_normal = ExtResource("ui_dropdown")
 ignore_texture_size = true
@@ -230,6 +235,7 @@ theme_override_font_sizes/font_size = 24
 text = "Currency: 50"
 
 [node name="MapBounds" type="ReferenceRect" parent="." unique_id=1859571548]
+mouse_filter = 2
 offset_left = -1882.0
 offset_top = -1300.0
 offset_right = 1869.0
