@@ -1,4 +1,6 @@
 extends Node2D
+const ClassicWire = preload("res://wires/ClassicWire.gd")
+const Junction = preload("res://wires/Junction.gd")
 
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var core: Node2D = $Core
@@ -269,13 +271,15 @@ func _unhandled_input(event: InputEvent):
 			var tile_pos = wire_system.pos_to_wire_tile(mouse_pos)
 			
 			if wire_system.wire_grid.has(tile_pos):
-				var w_idx = wire_system.WIRE_DIRS.find(wire_system.wire_grid[tile_pos].dir)
-				if w_idx != -1:
-					if event.keycode == KEY_E:
-						w_idx = (w_idx + 1) % 8
-					else:
-						w_idx = (w_idx - 1 + 8) % 8
-					wire_system.wire_grid[tile_pos].dir = wire_system.WIRE_DIRS[w_idx]
+				var existing = wire_system.wire_grid[tile_pos]
+				if existing.get_type() == "wire":
+					var w_idx = wire_system.WIRE_DIRS.find(existing.dir)
+					if w_idx != -1:
+						if event.keycode == KEY_E:
+							w_idx = (w_idx + 1) % 8
+						else:
+							w_idx = (w_idx - 1 + 8) % 8
+						existing.dir = wire_system.WIRE_DIRS[w_idx]
 					wire_system.current_wire_dir_index = w_idx
 					wire_system.queue_redraw()
 			else:
@@ -340,14 +344,7 @@ func _unhandled_input(event: InputEvent):
 				return
 				
 			if wire_system.wire_grid.has(tile_pos):
-				var wg = wire_system.wire_grid[tile_pos]
-				if wg.get("type", "wire") == "junction":
-					for itm in wg.get("items", []):
-						if is_instance_valid(itm.visual):
-							itm.visual.queue_free()
-				else:
-					if wg.get("item") != null and is_instance_valid(wg.item.visual):
-						wg.item.visual.queue_free()
+				wire_system.wire_grid[tile_pos].on_remove()
 				wire_system.wire_grid.erase(tile_pos)
 				wire_system.queue_redraw()
 				return
@@ -403,16 +400,21 @@ func _unhandled_input(event: InputEvent):
 						continue 
 						
 					if not wire_system.wire_grid.has(p):
-						wire_system.wire_grid[p] = { "type": "wire", "dir": dir, "item": null }
+						var cw = ClassicWire.new()
+						cw.init(p, wire_system)
+						cw.dir = dir
+						wire_system.wire_grid[p] = cw
 					else:
 						var existing = wire_system.wire_grid[p]
-						if existing.get("type", "wire") == "wire" and existing.dir != dir:
-							existing["type"] = "junction"
-							existing["dirs"] = [existing.dir, dir]
-							existing["items"] = [existing.item] if existing.get("item") != null else []
-							existing["item"] = null
-							existing["rr_idx"] = 0
-						elif existing.get("type", "wire") == "junction":
+						if existing.get_type() == "wire" and existing.dir != dir:
+							var j = Junction.new()
+							j.init(p, wire_system)
+							j.dirs.append(existing.dir)
+							j.dirs.append(dir)
+							if existing.item != null:
+								j.items.append(existing.item)
+							wire_system.wire_grid[p] = j
+						elif existing.get_type() == "junction":
 							if not dir in existing.dirs:
 								existing.dirs.append(dir)
 						
