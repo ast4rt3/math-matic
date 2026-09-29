@@ -32,6 +32,9 @@ var building_hover_highlight: ReferenceRect
 
 var target_zoom: Vector2 = Vector2(1, 1)
 var cam_pan_speed: float = 600.0
+var original_offsets = {}
+var tray_collapsed = false
+
 
 func _ready():
 	grid_system = GridSystemScript.new()
@@ -100,6 +103,16 @@ func _ready():
 		$UI/AdderButton.pressed.connect(start_placing_adder)
 	if has_node("UI/TurretButton"):
 		$UI/TurretButton.pressed.connect(start_placing_turret)
+	if has_node("UI/DropdownBtn"):
+		$UI/DropdownBtn.pressed.connect(_on_dropdown_pressed)
+		$UI/DropdownBtn.pivot_offset = $UI/DropdownBtn.size / 2.0
+		
+	var ui_nodes = ["UI/BuildingTray", "UI/CategoryTab", "UI/DropdownBtn", "UI/Slot1", "UI/Slot2", "UI/Slot3", "UI/MineButton", "UI/AdderButton", "UI/TurretButton"]
+	for node_path in ui_nodes:
+		if has_node(node_path):
+			var n = get_node(node_path)
+			original_offsets[node_path] = { "top": n.offset_top, "bottom": n.offset_bottom }
+
 		
 	# Spawn a dummy enemy
 	var enemy_scene = preload("res://buildings/EnemyDummy.tscn")
@@ -455,3 +468,15 @@ func _process(delta: float):
 					
 			cursor_highlight.rotation = wire_system.current_wire_dir_index * PI / 4.0
 			cursor_highlight.visible = true
+
+
+func _on_dropdown_pressed():
+	tray_collapsed = !tray_collapsed
+	var shift = 128.0 if tray_collapsed else 0.0
+	var tween = create_tween()
+	tween.set_parallel(true)
+	for node_path in original_offsets:
+		var n = get_node(node_path)
+		tween.tween_property(n, "offset_top", original_offsets[node_path].top + shift, 0.2).set_trans(Tween.TRANS_SINE)
+		tween.tween_property(n, "offset_bottom", original_offsets[node_path].bottom + shift, 0.2).set_trans(Tween.TRANS_SINE)
+	tween.tween_property($UI/DropdownBtn, "rotation_degrees", 180.0 if tray_collapsed else 0.0, 0.2)
