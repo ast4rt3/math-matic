@@ -98,6 +98,8 @@ func _ready():
 		$UI/MineButton.pressed.connect(start_placing_mine)
 	if has_node("UI/AdderButton"):
 		$UI/AdderButton.pressed.connect(start_placing_adder)
+	if has_node("UI/TurretButton"):
+		$UI/TurretButton.pressed.connect(start_placing_turret)
 		
 	# Spawn a dummy enemy
 	var enemy_scene = preload("res://buildings/EnemyDummy.tscn")
@@ -398,6 +400,8 @@ func _process(delta: float):
 		$UI/MineButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_MINE else Color(1, 1, 1)
 	if has_node("UI/AdderButton"):
 		$UI/AdderButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_ADDER else Color(1, 1, 1)
+	if has_node("UI/TurretButton"):
+		$UI/TurretButton.modulate = Color(0.2, 0.9, 1.0) if current_state == State.PLACING_TURRET else Color(1, 1, 1)
 		
 	var mouse_pos = get_global_mouse_position()
 	var snapped_pos = wire_system.snap_to_grid(mouse_pos)

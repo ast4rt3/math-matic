@@ -6,6 +6,8 @@
 [ext_resource type="PackedScene" uid="uid://cq2gau2gq8csi" path="res://buildings/Core.tscn" id="3_tlwt5"]
 [ext_resource type="Texture2D" uid="uid://g6fqt11y1gre" path="res://asset/miner32.png" id="5_dwbse"]
 [ext_resource type="Texture2D" uid="uid://dqwofy3fsewo7" path="res://asset/adder.png" id="6_pkg7o"]
+[ext_resource type="Texture2D" path="res://buildings/turret/turretBody.png" id="7_turret"]
+[ext_resource type="Texture2D" path="res://buildings/turret/turretHead.png" id="8_turret_head"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_tlwt5"]
 texture = ExtResource("1_fj7yv")
@@ -95,6 +97,36 @@ text = "Adder"
 icon = ExtResource("6_pkg7o")
 icon_alignment = 1
 vertical_icon_alignment = 2
+expand_icon = true
+
+[node name="TurretButton" type="Button" parent="UI"]
+offset_left = 171.0
+offset_top = 519.0
+offset_right = 243.0
+offset_bottom = 637.0
+action_mode = 0
+text = "Turret"
+icon = ExtResource("7_turret")
+icon_alignment = 1
+vertical_icon_alignment = 2
+expand_icon = true
+
+[node name="TurretHead" type="TextureRect" parent="UI/TurretButton"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -32.0
+offset_top = -86.0
+offset_right = 32.0
+offset_bottom = -22.0
+grow_horizontal = 2
+grow_vertical = 0
+texture = ExtResource("8_turret_head")
+expand_mode = 1
+stretch_mode = 5
 
 [node name="MapBounds" type="ReferenceRect" parent="." unique_id=1859571548]
 offset_left = -1882.0
