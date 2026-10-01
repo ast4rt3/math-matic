@@ -407,13 +407,20 @@ func _unhandled_input(event: InputEvent):
 					else:
 						var existing = wire_system.wire_grid[p]
 						if existing.get_type() == "wire" and existing.dir != dir:
-							var j = Junction.new()
-							j.init(p, wire_system)
-							j.dirs.append(existing.dir)
-							j.dirs.append(dir)
-							if existing.item != null:
-								j.items.append(existing.item)
-							wire_system.wire_grid[p] = j
+							var is_middle = (i > 0 and i < wire_system.preview_points.size() - 1)
+							var next_t = p + existing.dir
+							var existing_connected = wire_system.wire_grid.has(next_t) or wire_system.get_building_at(next_t) != null
+							
+							if is_middle or existing_connected:
+								var j = Junction.new()
+								j.init(p, wire_system)
+								j.dirs.append(existing.dir)
+								j.dirs.append(dir)
+								if existing.item != null:
+									j.items.append(existing.item)
+								wire_system.wire_grid[p] = j
+							else:
+								existing.dir = dir
 						elif existing.get_type() == "junction":
 							if not dir in existing.dirs:
 								existing.dirs.append(dir)
