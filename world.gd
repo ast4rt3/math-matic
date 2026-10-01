@@ -11,6 +11,7 @@ const WireSystemScript = preload("res://WireSystem.gd")
 
 var grid_system
 var wire_system
+var building_system
 
 enum State { IDLE, PLACING_MINE, PLACING_ADDER, PLACING_TURRET, DRAWING_WIRE, DELETING }
 var current_state: State = State.IDLE
@@ -50,6 +51,11 @@ func _ready():
 	add_child(wire_system)
 	
 	grid_system.wire_system = wire_system
+	
+	building_system = BuildingSystem.new()
+	building_system.grid_system = grid_system
+	building_system.wire_system = wire_system
+	add_child(building_system)
 	wire_system.grid_system = grid_system
 	
 	var bounds_node = get_node_or_null("MapBounds")
@@ -158,6 +164,7 @@ func _ready():
 	for child in get_children():
 		if child.has_node("OutputPort") and child.name != "Core":
 			grid_system.add_building(child, "miner")
+			child.reparent(building_system)
 			
 func start_drawing_wire():
 	if current_state == State.DRAWING_WIRE:
@@ -356,7 +363,7 @@ func _unhandled_input(event: InputEvent):
 					var mine = mine_scene.instantiate()
 					mine.position = snapped_pos
 					mine.linked_to = null
-					add_child(mine)
+					building_system.add_child(mine)
 					grid_system.add_building(mine, "miner")
 				return
 			if current_state == State.PLACING_ADDER:
@@ -364,7 +371,7 @@ func _unhandled_input(event: InputEvent):
 				if grid_system.can_place_building(snapped_pos, "adder") and core.spend(1.0, 20):
 					var adder = adder_scene.instantiate()
 					adder.position = snapped_pos
-					add_child(adder)
+					building_system.add_child(adder)
 					grid_system.add_building(adder, "adder")
 				return
 			if current_state == State.PLACING_TURRET:
@@ -372,7 +379,7 @@ func _unhandled_input(event: InputEvent):
 				if grid_system.can_place_building(snapped_pos, "turret") and core.spend(1.0, 50):
 					var turret = turret_scene.instantiate()
 					turret.position = snapped_pos
-					add_child(turret)
+					building_system.add_child(turret)
 					grid_system.add_building(turret, "turret")
 				return
 			if current_state == State.IDLE:
@@ -460,7 +467,7 @@ func _process(delta: float):
 	while tick_accumulator >= base_tick_rate:
 		tick_accumulator -= base_tick_rate
 		current_tick += 1
-		wire_system.tick_items(get_children(), current_tick)
+		building_system.tick_buildings(current_tick)
 
 	wire_system.process_items(delta, global_game_speed)
 			

@@ -72,6 +72,7 @@ tile_set = SubResource("TileSet_f3sb7")
 
 [node name="Camera2D" type="Camera2D" parent="." unique_id=1026984958]
 position = Vector2(3, 2)
+limit_enabled = false
 
 [node name="Core" parent="." unique_id=1575085873 instance=ExtResource("3_tlwt5")]
 
