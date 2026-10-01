@@ -6,13 +6,13 @@
 [ext_resource type="PackedScene" uid="uid://cq2gau2gq8csi" path="res://buildings/Core.tscn" id="3_tlwt5"]
 [ext_resource type="Texture2D" uid="uid://d0gyct04hhvor" path="res://ground.png" id="4_2o6r5"]
 [ext_resource type="Texture2D" uid="uid://g6fqt11y1gre" path="res://asset/miner32.png" id="5_dwbse"]
+[ext_resource type="Texture2D" uid="uid://b62earns4mhqt" path="res://asset/UI/buildingTray.png" id="6_2o6r5"]
 [ext_resource type="Texture2D" uid="uid://dqwofy3fsewo7" path="res://asset/adder.png" id="6_pkg7o"]
 [ext_resource type="Texture2D" uid="uid://2fx80o7sllww" path="res://buildings/turret/turretBody.png" id="7_turret"]
 [ext_resource type="Texture2D" uid="uid://dfgn68gjrft68" path="res://buildings/turret/turretHead.png" id="8_turret_head"]
 [ext_resource type="Texture2D" uid="uid://0qyinonhuhib" path="res://buildings/UI/buildingCategory.png" id="ui_category"]
 [ext_resource type="Texture2D" uid="uid://cs6ijuynh5eeg" path="res://buildings/UI/dropdownButton.png" id="ui_dropdown"]
 [ext_resource type="Texture2D" uid="uid://c005t1vm44nm6" path="res://buildings/UI/buildingSlot.png" id="ui_slot"]
-[ext_resource type="Texture2D" uid="uid://0jegfdcskb25" path="res://buildings/UI/buildingTray.png" id="ui_tray"]
 
 [sub_resource type="TileSetAtlasSource" id="TileSetAtlasSource_tlwt5"]
 texture = ExtResource("1_fj7yv")
@@ -93,7 +93,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = -128.0
 mouse_filter = 0
-texture = ExtResource("ui_tray")
+texture = ExtResource("6_2o6r5")
 expand_mode = 1
 
 [node name="CategoryTab" type="TextureRect" parent="UI" unique_id=1581876094]
@@ -142,6 +142,7 @@ anchor_bottom = 1.0
 offset_left = 16.0
 offset_top = -116.0
 offset_right = 88.0
+offset_bottom = -8.0
 grow_vertical = 0
 texture = ExtResource("ui_slot")
 expand_mode = 1
@@ -153,6 +154,7 @@ anchor_bottom = 1.0
 offset_left = 96.0
 offset_top = -116.0
 offset_right = 168.0
+offset_bottom = -8.0
 grow_vertical = 0
 texture = ExtResource("ui_slot")
 expand_mode = 1
@@ -164,6 +166,7 @@ anchor_bottom = 1.0
 offset_left = 176.0
 offset_top = -116.0
 offset_right = 248.0
+offset_bottom = -8.0
 grow_vertical = 0
 texture = ExtResource("ui_slot")
 expand_mode = 1
