@@ -242,10 +242,10 @@ theme_override_font_sizes/font_size = 24
 text = "Currency: 50"
 
 [node name="MapBounds" type="ReferenceRect" parent="." unique_id=1859571548]
-offset_left = -1704.0
+offset_left = -1610.0
 offset_top = -1232.0
-offset_right = 2047.0
+offset_right = 1984.0
 offset_bottom = 1168.0
 mouse_filter = 2
 border_color = Color(7.70092e-07, 0.64953566, 0.09225, 1)
-border_width = 2.9
+border_width = 24.9
