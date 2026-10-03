@@ -99,7 +99,7 @@ func get_bezier_points(p0: Vector2, p1: Vector2, p2: Vector2, segments: int) -> 
 	return pts
 
 func process_items(delta: float, game_speed: float):
-	var speed = 300.0 * game_speed
+	var speed = 1500.0 * game_speed
 	
 	for t in wire_grid:
 		wire_grid[t].update_progress(delta, speed)
