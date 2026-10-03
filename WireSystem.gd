@@ -24,10 +24,15 @@ var outline_color = Color(0.1, 0.1, 0.15)
 var wire_width = 4.0
 var outline_width = 8.0
 
+var arrow_tex = preload("res://asset/wireArrow.png")
+
 @export var grid_system: Node
 
 func _ready():
 	z_index = 1
+
+func _process(delta):
+	queue_redraw()
 
 func pos_to_wire_tile(pos: Vector2) -> Vector2i:
 	return Vector2i(floor(pos.x / 16.0), floor(pos.y / 16.0))

@@ -55,20 +55,46 @@ func draw(center: Vector2):
 		system.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
 		system.draw_line(center, center + Vector2(dir) * 8.0, Color(1, 1, 1), 2.0)
 	else:
+		var time = Time.get_ticks_msec() / 1000.0
+		var phase = (tile.x * dir.x + tile.y * dir.y) * 1.5 - time * 10.0
+		var flash = max(0.0, sin(phase))
+		var flash_color = system.wire_color.lerp(Color.WHITE, flash * 0.7)
+		
 		var p0 = center - Vector2(in_dir) * 8.0
 		var p1 = center
 		var p2 = center + Vector2(dir) * 8.0
 		var pts = system.get_bezier_points(p0, p1, p2, 8)
 		system.draw_polyline(pts, system.outline_color, system.outline_width, true)
-		system.draw_polyline(pts, system.wire_color, system.wire_width, true)
+		system.draw_polyline(pts, flash_color, system.wire_width, true)
+		
+		if flash > 0.01:
+			var arr_color = Color(1.0, 1.0, 1.0, flash)
+			var arrow_pos = p0 * 0.25 + p1 * 0.5 + p2 * 0.25
+			var angle = (p2 - p0).angle()
+			system.draw_set_transform(arrow_pos, angle, Vector2(1,1))
+			var ts = system.arrow_tex.get_size()
+			# Scale arrow down if it's large, assuming we want it to fit ~16x16
+			var scale_factor = min(16.0 / ts.x, 16.0 / ts.y)
+			var render_size = ts * scale_factor
+			system.draw_texture_rect(system.arrow_tex, Rect2(-render_size/2, render_size), false, arr_color)
+			system.draw_set_transform(Vector2.ZERO, 0, Vector2(1,1))
 
 func interpolate_items():
 	if item != null and is_instance_valid(item.visual):
+		var in_dir = item.get("move_dir", dir)
+		if in_dir == Vector2i.ZERO:
+			in_dir = dir
+			
 		var center = system.wire_tile_to_pos(tile)
-		var start = center - Vector2(dir) * 8.0
-		var end = center + Vector2(dir) * 8.0
+		var p0 = center - Vector2(in_dir) * 8.0
+		var p1 = center
+		var p2 = center + Vector2(dir) * 8.0
 		var frac = item.progress / 16.0
-		item.visual.global_position = start.lerp(end, frac)
+		
+		# Quadratic bezier interpolation
+		var q0 = p0.lerp(p1, frac)
+		var q1 = p1.lerp(p2, frac)
+		item.visual.global_position = q0.lerp(q1, frac)
 
 func on_remove():
 	if item != null and is_instance_valid(item.visual):

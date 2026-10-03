@@ -74,8 +74,24 @@ func push_items(moved_any: bool) -> bool:
 	return moved_any or locally_moved
 
 func draw(center: Vector2):
+	var time = Time.get_ticks_msec() / 1000.0
+	var d = dirs[0] if dirs.size() > 0 else Vector2i(1, 0)
+	var phase = (tile.x * d.x + tile.y * d.y) * 1.5 - time * 10.0
+	var flash = max(0.0, sin(phase))
+	var flash_color = system.wire_color.lerp(Color.WHITE, flash * 0.7)
+
 	system.draw_rect(Rect2(center - Vector2(8, 8), Vector2(16, 16)), system.outline_color)
-	system.draw_rect(Rect2(center - Vector2(6, 6), Vector2(12, 12)), system.wire_color)
+	system.draw_rect(Rect2(center - Vector2(6, 6), Vector2(12, 12)), flash_color)
+	
+	if flash > 0.01:
+		var arr_color = Color(1.0, 1.0, 1.0, flash)
+		var angle = Vector2(d).angle()
+		system.draw_set_transform(center, angle, Vector2(1,1))
+		var ts = system.arrow_tex.get_size()
+		var scale_factor = min(16.0 / ts.x, 16.0 / ts.y)
+		var render_size = ts * scale_factor
+		system.draw_texture_rect(system.arrow_tex, Rect2(-render_size/2, render_size), false, arr_color)
+		system.draw_set_transform(Vector2.ZERO, 0, Vector2(1,1))
 
 func interpolate_items():
 	var center = system.wire_tile_to_pos(tile)
