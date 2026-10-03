@@ -55,21 +55,7 @@ func tick_buildings(current_tick: int):
 						if child.has_method("get_output_value"): val = child.get_output_value()
 						if child.has_method("consume_output"): child.consume_output()
 						
-						var container = Node2D.new()
-						container.z_index = 20
-						var bg = Sprite2D.new()
-						bg.texture = preload("res://asset/itemContainer.png")
-						container.add_child(bg)
-						var lbl = Label.new()
-						lbl.text = str(int(val)) if val == round(val) else str(val)
-						lbl.add_theme_font_size_override("font_size", 12)
-						lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-						lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-						lbl.position = Vector2(-16, -16)
-						lbl.size = Vector2(32, 32)
-						container.add_child(lbl)
-						
-						wire_system.get_parent().add_child(container)
+						var container = wire_system.get_item_visual(val)
 						itm_check.value = val
 						itm_check.visual = container
 						

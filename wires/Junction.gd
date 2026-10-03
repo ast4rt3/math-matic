@@ -22,6 +22,7 @@ func accept_item(itm: Dictionary, from_dir: Vector2i) -> bool:
 		itm.progress = 0.0
 		itm.move_dir = from_dir
 		items.append(itm)
+		system.active_wires[tile] = true
 		return true
 	return false
 
@@ -54,7 +55,7 @@ func push_items(moved_any: bool) -> bool:
 						can_receive = b.can_receive(tile)
 					if can_receive:
 						if b.has_method("receive"): b.receive(itm.value, tile)
-						if is_instance_valid(itm.visual): itm.visual.queue_free()
+						if is_instance_valid(itm.visual): system.recycle_item_visual(itm.visual)
 						items_to_remove.append(itm)
 						locally_moved = true
 						if dirs_to_try.size() > 1: rr_idx = (idx + 1) % dirs_to_try.size()
@@ -71,26 +72,32 @@ func push_items(moved_any: bool) -> bool:
 	for rem in items_to_remove:
 		items.erase(rem)
 		
+	if items.size() == 0:
+		system.active_wires.erase(tile)
+		
 	return moved_any or locally_moved
 
-func draw(center: Vector2):
+func draw_outline(center: Vector2):
+	system.draw_rect(Rect2(center - Vector2(8, 8), Vector2(16, 16)), system.outline_color)
+
+func draw_wire(center: Vector2):
 	var time = Time.get_ticks_msec() / 1000.0
 	var d = dirs[0] if dirs.size() > 0 else Vector2i(1, 0)
 	var phase = (tile.x * d.x + tile.y * d.y) * 1.5 - time * 10.0
 	var flash = max(0.0, sin(phase))
 	var flash_color = system.wire_color.lerp(Color.WHITE, flash * 0.7)
-
-	system.draw_rect(Rect2(center - Vector2(8, 8), Vector2(16, 16)), system.outline_color)
 	system.draw_rect(Rect2(center - Vector2(6, 6), Vector2(12, 12)), flash_color)
 	
+func draw_arrow(center: Vector2):
+	var time = Time.get_ticks_msec() / 1000.0
+	var d = dirs[0] if dirs.size() > 0 else Vector2i(1, 0)
+	var phase = (tile.x * d.x + tile.y * d.y) * 1.5 - time * 10.0
+	var flash = max(0.0, sin(phase))
 	if flash > 0.01:
 		var arr_color = Color(1.0, 1.0, 1.0, flash)
 		var angle = Vector2(d).angle()
 		system.draw_set_transform(center, angle, Vector2(1,1))
-		var ts = system.arrow_tex.get_size()
-		var scale_factor = min(16.0 / ts.x, 16.0 / ts.y)
-		var render_size = ts * scale_factor
-		system.draw_texture_rect(system.arrow_tex, Rect2(-render_size/2, render_size), false, arr_color)
+		system.draw_texture_rect(system.arrow_tex, Rect2(-system.arrow_render_size/2, system.arrow_render_size), false, arr_color)
 		system.draw_set_transform(Vector2.ZERO, 0, Vector2(1,1))
 
 func interpolate_items():
@@ -107,4 +114,4 @@ func interpolate_items():
 func on_remove():
 	for itm in items:
 		if is_instance_valid(itm.visual):
-			itm.visual.queue_free()
+			system.recycle_item_visual(itm.visual)

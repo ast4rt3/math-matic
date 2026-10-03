@@ -315,6 +315,8 @@ func _unhandled_input(event: InputEvent):
 					var current = last_tile
 					var steps = 0
 					while current != target_tile and steps < 50:
+						if wire_system.preview_points.size() > 100:
+							break
 						steps += 1
 						if abs(target_tile.x - current.x) > 0 and abs(target_tile.y - current.y) > 0:
 							current.x += sign(target_tile.x - current.x)
@@ -353,6 +355,7 @@ func _unhandled_input(event: InputEvent):
 			if wire_system.wire_grid.has(tile_pos):
 				wire_system.wire_grid[tile_pos].on_remove()
 				wire_system.wire_grid.erase(tile_pos)
+				wire_system.grid_version += 1
 				wire_system.queue_redraw()
 				return
 
@@ -411,6 +414,7 @@ func _unhandled_input(event: InputEvent):
 						cw.init(p, wire_system)
 						cw.dir = dir
 						wire_system.wire_grid[p] = cw
+						wire_system.grid_version += 1
 					else:
 						var existing = wire_system.wire_grid[p]
 						if existing.get_type() == "wire" and existing.dir != dir:
@@ -426,11 +430,15 @@ func _unhandled_input(event: InputEvent):
 								if existing.item != null:
 									j.items.append(existing.item)
 								wire_system.wire_grid[p] = j
+								wire_system.grid_version += 1
 							else:
-								existing.dir = dir
+								if existing.dir != dir:
+									existing.dir = dir
+									wire_system.grid_version += 1
 						elif existing.get_type() == "junction":
 							if not dir in existing.dirs:
 								existing.dirs.append(dir)
+								wire_system.grid_version += 1
 						
 				wire_system.preview_points.clear()
 				wire_system.queue_redraw()
