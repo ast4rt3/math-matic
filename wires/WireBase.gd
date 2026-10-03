@@ -3,6 +3,8 @@ class_name WireBase
 
 var tile: Vector2i
 var system
+func trigger_cache_update():
+	pass
 
 func init(t: Vector2i, sys):
 	tile = t

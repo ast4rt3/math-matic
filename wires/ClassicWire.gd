@@ -50,31 +50,29 @@ func push_items(moved_any: bool) -> bool:
 					return true
 	return moved_any
 	
-func update_cache(center: Vector2):
-	if _cache_version != system.grid_version:
-		_cache_in_dir = dir
-		for test_dir in system.WIRE_DIRS:
-			var neighbor = tile - test_dir
-			if system.wire_grid.has(neighbor):
-				var nw = system.wire_grid[neighbor]
-				if (nw.get_type() == "wire" and nw.dir == test_dir) or (nw.get_type() == "junction" and test_dir in nw.dirs):
-					_cache_in_dir = test_dir
-					break
-					
-		var p0 = center - Vector2(_cache_in_dir) * 8.0
-		var p1 = center
-		var p2 = center + Vector2(dir) * 8.0
-		_cache_pts = system.get_bezier_points(p0, p1, p2, 8)
-		_cache_arrow_pos = p0 * 0.25 + p1 * 0.5 + p2 * 0.25
-		_cache_arrow_angle = (p2 - p0).angle()
-		_cache_version = system.grid_version
+func trigger_cache_update():
+	_cache_in_dir = dir
+	for test_dir in system.WIRE_DIRS:
+		var neighbor = tile - test_dir
+		if system.wire_grid.has(neighbor):
+			var nw = system.wire_grid[neighbor]
+			if (nw.get_type() == "wire" and nw.dir == test_dir) or (nw.get_type() == "junction" and test_dir in nw.dirs):
+				_cache_in_dir = test_dir
+				break
+				
+	var center = Vector2(tile.x * 16.0 + 8.0, tile.y * 16.0 + 8.0)
+	var p0 = center - Vector2(_cache_in_dir) * 8.0
+	var p1 = center
+	var p2 = center + Vector2(dir) * 8.0
+	_cache_pts = system.get_bezier_points(p0, p1, p2, 8)
+	_cache_arrow_pos = p0 * 0.25 + p1 * 0.5 + p2 * 0.25
+	_cache_arrow_angle = (p2 - p0).angle()
 
 func draw_outline(center: Vector2):
-	update_cache(center)
 	if system.debug_mode:
 		system.draw_rect(Rect2(center - Vector2(4, 4), Vector2(8, 8)), Color(0.2, 0.9, 1.0))
 	else:
-		system.draw_polyline(_cache_pts, system.outline_color, system.outline_width, false)
+		system.draw_multiline(_cache_pts, system.outline_color, system.outline_width)
 
 func draw_wire(center: Vector2):
 	if system.debug_mode:
@@ -84,7 +82,7 @@ func draw_wire(center: Vector2):
 		var phase = (tile.x * dir.x + tile.y * dir.y) * 1.5 - time * 10.0
 		var flash = max(0.0, sin(phase))
 		var flash_color = system.wire_color.lerp(Color.WHITE, flash * 0.7)
-		system.draw_polyline(_cache_pts, flash_color, system.wire_width, false)
+		system.draw_multiline(_cache_pts, flash_color, system.wire_width)
 
 func draw_arrow(center: Vector2):
 	if not system.debug_mode:

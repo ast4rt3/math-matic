@@ -63,6 +63,14 @@ func recycle_item_visual(vis: Node2D):
 		vis.hide()
 		item_visual_pool.append(vis)
 
+func notify_grid_changed(t: Vector2i):
+	if wire_grid.has(t):
+		wire_grid[t].trigger_cache_update()
+	for dir in WIRE_DIRS:
+		var neighbor = t + dir
+		if wire_grid.has(neighbor):
+			wire_grid[neighbor].trigger_cache_update()
+
 func _ready():
 	z_index = 1
 	var ts = arrow_tex.get_size()
@@ -154,16 +162,20 @@ func _draw():
 				var p1 = center
 				var p2 = center + Vector2(out_dir) * 8.0
 				var pts = get_bezier_points(p0, p1, p2, 8)
-				draw_polyline(pts, c_outline, outline_width, false)
-				draw_polyline(pts, c_wire, wire_width, false)
+				draw_multiline(pts, c_outline, outline_width)
+				draw_multiline(pts, c_wire, wire_width)
 
 func get_bezier_points(p0: Vector2, p1: Vector2, p2: Vector2, segments: int) -> PackedVector2Array:
 	var pts = PackedVector2Array()
-	for i in range(segments + 1):
+	var prev_pt = p0.lerp(p1, 0.0).lerp(p1.lerp(p2, 0.0), 0.0)
+	for i in range(1, segments + 1):
 		var t = float(i) / float(segments)
 		var q0 = p0.lerp(p1, t)
 		var q1 = p1.lerp(p2, t)
-		pts.append(q0.lerp(q1, t))
+		var current_pt = q0.lerp(q1, t)
+		pts.append(prev_pt)
+		pts.append(current_pt)
+		prev_pt = current_pt
 	return pts
 
 func process_items(delta: float, game_speed: float):

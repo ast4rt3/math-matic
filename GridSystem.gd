@@ -53,7 +53,7 @@ func add_building(building: Node2D, b_type: String):
 					if wire_system.wire_grid[tile].item != null and is_instance_valid(wire_system.wire_grid[tile].item.visual):
 						wire_system.recycle_item_visual(wire_system.wire_grid[tile].item.visual)
 					wire_system.wire_grid.erase(tile)
-					wire_system.grid_version += 1
+					wire_system.notify_grid_changed(tile)
 		wire_system.queue_redraw()
 	update_astar()
 
