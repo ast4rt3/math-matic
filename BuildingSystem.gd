@@ -70,14 +70,19 @@ func tick_buildings(current_tick: int):
 						if child.has_method("consume_output"): child.consume_output()
 						
 						miner_round_robin[child] = (idx + 1) % valid_outputs.size()
-					else:
-						wire_system.recycle_item_visual(container)
-
 						
 						# Bouncy feedback for the building
 						if is_instance_valid(child):
+							if child.has_meta("bounce_tween"):
+								var old_tw = child.get_meta("bounce_tween")
+								if is_instance_valid(old_tw) and old_tw.is_valid():
+									old_tw.kill()
+							child.scale = Vector2(1.0, 1.0)
 							var tw = create_tween().set_trans(Tween.TRANS_SPRING).set_ease(Tween.EASE_OUT)
 							tw.tween_property(child, "scale", Vector2(1.1, 1.1), 0.1)
 							tw.tween_property(child, "scale", Vector2(1.0, 1.0), 0.3)
+							child.set_meta("bounce_tween", tw)
 							
 						break
+					else:
+						wire_system.recycle_item_visual(container)
